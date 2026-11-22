@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 외부 전송 차단: 이 페이지는 어떤 서버에도 접속·전송하지 않음 (스크립트·스타일은 이 파일 안의 것만, 파일 읽기 도구는 blob으로) -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src blob: data:; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <title>성적분석</title>
 <style>
   :root {
@@ -261,7 +263,7 @@
   }
 </style>
 
-<script>window.APP = { version: '2026.11.22-pc' };</script>
+<script>window.APP = { version: '2026.11.22-pc2' };</script>
 </head>
 <body>
 <div class="wrap">
@@ -453,6 +455,13 @@
 
 
 <!-- 백업 -->
+<style>
+  .bk-box { background: var(--fill2); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  .bk-box > b { display: block; margin-bottom: 8px; }
+  .bk-box p { margin: 8px 0 0; }
+  .bk-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .bk-row input { flex: 1 1 150px; min-width: 0; border: 1px solid var(--sep); background: #fff; border-radius: 10px; padding: 7px 10px; font: inherit; }
+</style>
 <div class="modal-wrap closed no-print" id="backupModal">
   <section class="card modal" role="dialog" aria-modal="true" aria-labelledby="backupTitle" style="width:min(560px,100%)">
     <div class="card-head">
@@ -461,13 +470,23 @@
     </div>
     <p class="muted" id="backupNow" style="margin:0 0 4px"></p>
     <p class="muted" id="backupLast" style="margin:0 0 14px"></p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn primary" id="btnBackupSave">백업 파일로 저장</button>
-      <button class="btn" id="btnBackupLoad">백업 파일 불러오기</button>
+    <div class="bk-box" id="bkSaveBox">
+      <b>백업 파일로 저장</b>
+      <div class="bk-row">
+        <input type="password" id="bkPw" placeholder="비밀번호 (4자 이상)" autocomplete="new-password" aria-label="백업 비밀번호">
+        <input type="password" id="bkPw2" placeholder="비밀번호 한 번 더" autocomplete="new-password" aria-label="백업 비밀번호 확인">
+        <button class="btn primary" id="btnBackupSave">저장</button>
+      </div>
+      <p class="muted">백업 파일은 이 비밀번호로 잠겨요. 불러올 때 필요하고, <b>잊으면 열 수 없어요.</b></p>
+    </div>
+    <div class="bk-box">
+      <b>백업 파일 불러오기</b>
+      <div class="bk-row"><button class="btn" id="btnBackupLoad">백업 파일 고르기</button></div>
       <input type="file" id="backupFile" accept=".json,application/json" hidden>
     </div>
     <div class="confirm hidden" id="backupConfirm">
       <span id="backupConfirmText"></span>
+      <div class="bk-row hidden" id="bkOpenRow" style="margin-top:10px"><input type="password" id="bkPwOpen" placeholder="백업 비밀번호" autocomplete="current-password" aria-label="백업 비밀번호"></div>
       <div style="display:flex; gap:8px; margin-top:10px">
         <button class="btn small" id="backupNo">취소</button>
         <button class="btn small" style="background:var(--red);color:#fff" id="backupYes">불러오기</button>
@@ -475,7 +494,7 @@
     </div>
     <div class="log" id="backupLog"></div>
     <ul class="steps" style="margin-top:14px">
-      <li>백업 파일에는 학생 이름과 성적이 들어 있어요. 학교 PC나 개인 USB 등 안전한 곳에 보관하세요.</li>
+      <li>백업 파일은 비밀번호로 암호화돼서, 비밀번호 없이는 메모장으로 열어도 성적이 보이지 않아요. 그래도 비밀번호는 파일과 따로 보관하세요.</li>
       <li>다른 PC에서 쓰려면 그 PC에서 이 사이트를 열고 [백업 파일 불러오기]를 하세요. 파일을 올리기 칸에 끌어다 놓아도 돼요.</li>
     </ul>
   </section>
@@ -2445,34 +2464,78 @@ const NaesinParser = (() => {
   });
 
   // ───────── 백업 파일 (이 브라우저에 저장된 성적·교육과정을 PC에 파일로) ─────────
+  // 백업 파일은 비밀번호로 암호화 (PBKDF2-SHA256으로 키를 만들고 AES-256-GCM으로 잠금, 브라우저 내장 Web Crypto)
+  //   예전(비밀번호 없는, version 1) 백업도 불러올 수 있음
   const BACKUP_TYPE = 'grade-analyzer-backup';
-  let pendingBackup = null;
+  const KDF_ITER = 250000;
+  let pendingBackup = null; // { fileName, savedAt, encrypted, file } 또는 { fileName, savedAt, students, cur }
   const backupInfo = () => {
     const list = students();
     const ns = list.filter((s) => s.naesin).length;
     const sess = allSessions().length;
     return `${new Set(list.map((s) => `${s.grade}-${s.cls}`)).size}개 반 ${list.length}명 (내신 ${ns}명 · 모의고사 ${sess}회차)`;
   };
+  const b64e = (buf) => { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(s); };
+  const b64d = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+  const needCrypto = () => { if (!(window.crypto && crypto.subtle)) throw new Error('이 브라우저에서는 암호화를 쓸 수 없어요. 최신 크롬·엣지에서 https 주소로 열어 주세요'); };
+  async function keyFrom(pw, salt, iterations) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function encryptBackup(obj, pw) {
+    needCrypto();
+    const salt = crypto.getRandomValues(new Uint8Array(16)); const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await keyFrom(pw, salt, KDF_ITER);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+    return {
+      type: BACKUP_TYPE, version: 2, encrypted: true, app: APP.version, savedAt: new Date().toISOString(),
+      kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations: KDF_ITER, salt: b64e(salt) }, cipher: { name: 'AES-GCM', iv: b64e(iv) }, data: b64e(ct),
+    };
+  }
+  async function decryptBackup(file, pw) {
+    needCrypto();
+    const key = await keyFrom(pw, b64d(file.kdf.salt), Number(file.kdf.iterations) || KDF_ITER);
+    let plain;
+    try { plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(file.cipher.iv) }, key, b64d(file.data)); } catch { throw new Error('비밀번호가 맞지 않아요'); }
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+  const backupLog = (kind, text) => { $('backupLog').innerHTML = `<div class="${kind}">${esc(text)}</div>`; };
+
   function renderBackup() {
     const last = ui.lastBackup ? new Date(ui.lastBackup) : null;
     $('backupNow').textContent = students().length ? `지금 이 브라우저에 저장된 성적: ${backupInfo()}` : '지금 이 브라우저에 저장된 성적이 없어요.';
     $('backupLast').textContent = last ? `이 브라우저에서 마지막으로 백업한 때: ${last.toLocaleString('ko-KR')}` : '아직 백업 파일을 저장한 적이 없어요.';
     $('btnBackupSave').disabled = !students().length;
+    $('bkSaveBox').classList.toggle('hidden', !students().length);
     $('backupConfirm').classList.toggle('hidden', !pendingBackup);
     if (pendingBackup) {
-      const n = Object.keys(pendingBackup.students || {}).length;
-      $('backupConfirmText').textContent = `${pendingBackup.fileName} (${pendingBackup.savedAt ? new Date(pendingBackup.savedAt).toLocaleString('ko-KR') : '날짜 모름'}, 학생 ${n}명)을 불러올까요? 지금 이 브라우저에 있는 성적·교육과정은 백업 내용으로 바뀌어요.`;
+      const when = pendingBackup.savedAt ? new Date(pendingBackup.savedAt).toLocaleString('ko-KR') : '날짜 모름';
+      const what = pendingBackup.encrypted ? '비밀번호로 잠긴 백업' : `비밀번호 없는 예전 백업, 학생 ${Object.keys(pendingBackup.students || {}).length}명`;
+      const replace = students().length ? ' 불러오면 지금 이 브라우저에 있는 성적·교육과정이 백업 내용으로 바뀌어요.' : '';
+      $('backupConfirmText').textContent = `${pendingBackup.fileName} (${when}, ${what})${pendingBackup.encrypted ? ' — 백업할 때 정한 비밀번호를 넣어 주세요.' : '을 불러올까요?'}${replace}`;
+      $('bkOpenRow').classList.toggle('hidden', !pendingBackup.encrypted);
     }
   }
   function openBackup() { $('backupLog').innerHTML = ''; renderBackup(); openModal('backupModal'); }
+
   async function saveBackup() {
-    const data = { type: BACKUP_TYPE, version: 1, app: APP.version, savedAt: new Date().toISOString(), students: db.students, cur };
-    const text = JSON.stringify(data);
+    const pw = $('bkPw').value; const pw2 = $('bkPw2').value;
+    if (pw.length < 4) { backupLog('err', '비밀번호를 4자 이상 넣어 주세요.'); $('bkPw').focus(); return; }
+    if (pw !== pw2) { backupLog('err', '두 비밀번호가 달라요. 다시 넣어 주세요.'); $('bkPw2').focus(); return; }
+    const btn = $('btnBackupSave'); btn.disabled = true; btn.textContent = '잠그는 중…';
+    let text;
+    try {
+      text = JSON.stringify(await encryptBackup({ students: db.students, cur }, pw));
+    } catch (e) {
+      backupLog('err', `백업 파일을 만들지 못했어요. (${e.message})`); return;
+    } finally { btn.disabled = false; btn.textContent = '저장'; }
     const d = new Date(); const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const name = `성적분석_백업_${day}.json`;
     const done = (saved = name) => {
-      ui.lastBackup = Date.now(); saveUi(); renderBackup();
-      $('backupLog').innerHTML = `<div class="ok">백업 파일을 저장했어요. (${esc(saved)}) 학생 개인정보가 들어 있으니 안전한 곳에 보관하세요.</div>`;
+      ui.lastBackup = Date.now(); saveUi();
+      $('bkPw').value = ''; $('bkPw2').value = '';
+      renderBackup();
+      backupLog('ok', `비밀번호로 잠근 백업 파일을 저장했어요. (${saved}) 비밀번호를 잊으면 열 수 없으니 따로 기억해 두세요.`);
     };
     if (window.showSaveFilePicker) { // 크롬·엣지: 저장할 곳과 이름을 고르는 창
       try {
@@ -2488,32 +2551,54 @@ const NaesinParser = (() => {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     done(a.download);
   }
+
   async function readBackup(file) {
     openBackup();
     try {
       const data = JSON.parse(await file.text());
-      if (!data || data.type !== BACKUP_TYPE || typeof data.students !== 'object') throw new Error('성적분석 백업 파일이 아니에요');
-      pendingBackup = { ...data, fileName: file.name };
+      if (!data || data.type !== BACKUP_TYPE) throw new Error('성적분석 백업 파일이 아니에요');
+      if (data.encrypted) {
+        if (!data.data || !data.kdf || !data.cipher) throw new Error('백업 파일이 손상됐어요');
+        pendingBackup = { fileName: file.name, savedAt: data.savedAt, encrypted: true, file: data };
+        $('bkPwOpen').value = '';
+        renderBackup();
+        $('bkPwOpen').focus();
+        return;
+      }
+      if (typeof data.students !== 'object') throw new Error('성적분석 백업 파일이 아니에요');
+      pendingBackup = { fileName: file.name, savedAt: data.savedAt, students: data.students, cur: data.cur };
       if (!students().length) { await applyBackup(); return; }
       renderBackup();
     } catch (e) {
-      $('backupLog').innerHTML = `<div class="err">${esc(file.name)}: 불러오지 못했어요. (${esc(e.message)}) [백업 파일로 저장]으로 만든 .json 파일을 골라 주세요.</div>`;
+      backupLog('err', `${file.name}: 불러오지 못했어요. (${e.message}) [백업 파일로 저장]으로 만든 .json 파일을 골라 주세요.`);
     }
   }
+
   async function applyBackup() {
-    const b = pendingBackup; pendingBackup = null;
-    if (!b) return;
+    const pb = pendingBackup;
+    if (!pb) return;
+    let content = pb;
+    if (pb.encrypted) {
+      const pw = $('bkPwOpen').value;
+      if (!pw) { backupLog('err', '백업 비밀번호를 넣어 주세요.'); $('bkPwOpen').focus(); return; }
+      const btn = $('backupYes'); btn.disabled = true; btn.textContent = '여는 중…';
+      try { content = await decryptBackup(pb.file, pw); } catch (e) {
+        backupLog('err', `${e.message}. 다시 넣어 주세요.`); $('bkPwOpen').select(); return;
+      } finally { btn.disabled = false; btn.textContent = '불러오기'; }
+    }
+    pendingBackup = null;
     try {
-      db = { students: b.students || {} };
-      cur = b.cur && typeof b.cur === 'object' ? b.cur : {};
+      db = { students: content.students && typeof content.students === 'object' ? content.students : {} };
+      cur = content.cur && typeof content.cur === 'object' ? content.cur : {};
       await LocalStore.set('students', db.students);
       await LocalStore.set('cur', cur);
       for (const k of ['cls', 'stu', 'session', 'classSession', 'schoolGrade', 'schoolSession']) delete ui[k];
+      $('bkPwOpen').value = '';
       renderBackup();
-      $('backupLog').innerHTML = `<div class="ok">${esc(b.fileName)}을(를) 불러왔어요. ${esc(backupInfo())}</div>`;
+      backupLog('ok', `${pb.fileName}을(를) 불러왔어요. ${backupInfo()}`);
       render();
     } catch (e) {
-      $('backupLog').innerHTML = `<div class="err">저장하지 못했어요. (${esc(e.message)})</div>`;
+      backupLog('err', `저장하지 못했어요. (${e.message})`);
     }
   }
   $('btnBackup').addEventListener('click', openBackup);
@@ -2521,8 +2606,10 @@ const NaesinParser = (() => {
   $('btnBackupSave').addEventListener('click', saveBackup);
   $('btnBackupLoad').addEventListener('click', () => $('backupFile').click());
   $('backupFile').addEventListener('change', (e) => { if (e.target.files[0]) readBackup(e.target.files[0]); e.target.value = ''; });
-  $('backupNo').addEventListener('click', () => { pendingBackup = null; renderBackup(); });
+  $('backupNo').addEventListener('click', () => { pendingBackup = null; $('bkPwOpen').value = ''; renderBackup(); });
   $('backupYes').addEventListener('click', applyBackup);
+  $('bkPw2').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveBackup(); });
+  $('bkPwOpen').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyBackup(); });
 
   // ───────── 시작: 이 브라우저에서 불러오기 ─────────
   window.addEventListener('beforeunload', (e) => {
