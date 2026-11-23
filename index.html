@@ -137,6 +137,8 @@
   .reg-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
   @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
 
+  .head-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
   /* 전교생 */
   .school-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 12px; font-size: 12px; font-weight: 600; color: var(--label2); }
   .school-bar label { display: flex; align-items: center; gap: 6px; }
@@ -263,7 +265,7 @@
   }
 </style>
 
-<script>window.APP = { version: '2026.11.23-pc3' };</script>
+<script>window.APP = { version: '2026.11.23-pc4' };</script>
 </head>
 <body>
 <div class="wrap">
@@ -373,7 +375,7 @@
     <section class="card hidden" id="classView">
       <div class="card-head">
         <div><h2 id="classTitle"></h2><p id="classSub"></p></div>
-        <select id="selClassSession" aria-label="회차"></select>
+        <div class="head-actions"><select id="selClassSession" aria-label="회차"></select><button class="btn small no-print" id="btnClassXlsx" title="지금 보이는 표를 엑셀 파일로 저장">엑셀로 저장</button></div>
       </div>
       <div class="scroll-x"><table id="classTable"></table></div>
     </section>
@@ -382,6 +384,7 @@
     <section class="card hidden" id="schoolView">
       <div class="card-head">
         <div><h2 id="schoolTitle"></h2><p id="schoolSub"></p></div>
+        <button class="btn small no-print" id="btnSchoolXlsx" title="지금 보이는 표(순서·범위 그대로)를 엑셀 파일로 저장">엑셀로 저장</button>
       </div>
       <div class="school-bar no-print">
         <label>학년 <select id="selSchoolGrade"></select></label>
@@ -1563,6 +1566,46 @@ const NaesinParser = (() => {
     return `${svg}</svg>`;
   }
 
+  // ───────── 엑셀로 저장 (반 전체 · 전교생) ─────────
+  //   화면에 보이는 순서·범위 그대로. 과목은 표준점수·백분위·등급을 칸을 나눠 숫자로 저장
+  const exportSpec = { class: null, school: null };
+  const r2 = (v) => (v == null || Number.isNaN(v) ? null : Math.round(v * 100) / 100);
+  const xOne = (head, get) => ({ xh: [head], xv: (r) => [get(r) ?? null] });
+  const xSubj = (name, get, opt = {}) => {
+    if (opt.gradeOnly) return { xh: [`${name} 등급`], xv: (r) => { const x = get(r); return [x ? x.grade : null]; } };
+    const head = [...(opt.withName ? [`${name} 과목`] : []), `${name} 표준점수`, `${name} 백분위`, `${name} 등급`];
+    return { xh: head, xv: (r) => { const x = get(r); return [...(opt.withName ? [x ? x.label : null] : []), x ? x.std : null, x ? x.pct : null, x ? x.grade : null]; } };
+  };
+  const today = () => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`; };
+  async function downloadXlsx(spec) {
+    if (!spec || !spec.rows.length) { toast('저장할 학생이 없어요.', 'warn'); return; }
+    let X;
+    try { X = await loadXlsx(); } catch (e) { toast(`엑셀 도구를 불러오지 못했어요. (${e.message})`, 'err'); return; }
+    const ws = X.utils.aoa_to_sheet([spec.header, ...spec.rows]);
+    ws['!cols'] = spec.header.map((h, i) => {
+      const w = Math.max(String(h).length * 2, ...spec.rows.slice(0, 200).map((row) => String(row[i] ?? '').length * (typeof row[i] === 'string' ? 2 : 1)));
+      return { wch: Math.max(5, Math.min(30, w + 1)) };
+    });
+    ws['!autofilter'] = { ref: X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: spec.rows.length, c: spec.header.length - 1 } }) };
+    const wb = X.utils.book_new();
+    X.utils.book_append_sheet(wb, ws, spec.sheet.replace(/[:\\/?*[\]]/g, ' ').slice(0, 31));
+    const blob = new Blob([X.write(wb, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const name = `${spec.file}_${today()}.xlsx`;
+    if (window.showSaveFilePicker) { // 크롬·엣지: 저장할 곳과 이름을 고르는 창 (웹 앱처럼 다른 주소 안에서는 안 열려서 아래 내려받기로)
+      try {
+        const h = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: '엑셀 파일', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+        const w = await h.createWritable(); await w.write(blob); await w.close();
+        toast(`엑셀로 저장했어요. (${name})`); return;
+      } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${spec.ascii}-${today()}.xlsx`; // 내려받기는 한글 이름이 무시되는 브라우저가 있어 영문 이름
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast(`엑셀로 저장했어요. (${a.download})`);
+  }
+
   // ───────── 반 전체 ─────────
   function renderClass() {
     const list = studentsOfClass(ui.cls);
@@ -1590,13 +1633,13 @@ const NaesinParser = (() => {
     const cols = [
       { id: 'no', label: '번호', val: (r) => r.s.no },
       { id: 'name', label: '이름', val: (r) => r.s.name || '' },
-      ...['국어', '수학', '영어', '한국사'].map((c) => ({ id: c, label: c, subj: (r) => r.sess.subjects.find((x) => x.category === c) })),
-      ...tamHead.map((h, i) => ({ id: `t${i}`, label: h, subj: (r) => r.tams[i], showLabel: /^탐구\d$/.test(h) })),
+      ...['국어', '수학', '영어', '한국사'].map((c) => ({ id: c, label: c, subj: (r) => r.sess.subjects.find((x) => x.category === c), ...xSubj(c, (r) => r.sess.subjects.find((x) => x.category === c), { gradeOnly: c === '영어' || c === '한국사' }) })),
+      ...tamHead.map((h, i) => ({ id: `t${i}`, label: h, subj: (r) => r.tams[i], showLabel: /^탐구\d$/.test(h), ...xSubj(h, (r) => r.tams[i], { withName: /^탐구\d$/.test(h) }) })),
       { id: 'std', label: '표점합', val: (r) => r.sm.std.total },
       { id: 'two', label: '2개합', val: (r) => r.sm.two.total },
       { id: 'three', label: '3개합', val: (r) => r.sm.three.total },
       { id: 'four', label: '4개합', val: (r) => r.sm.four.total },
-    ];
+    ].map((c) => (c.xh ? c : { ...c, ...xOne(c.label, c.val) }));
     const sort = ui.sort && cols.some((c) => c.id === ui.sort.id) ? ui.sort : { id: 'no', dir: 1 };
     const col = cols.find((c) => c.id === sort.id);
     // 과목: 등급 좋은 순 → 표준점수 높은 순 / 표점합: 높은 순 / 영역합: 낮은(좋은) 순
@@ -1630,6 +1673,10 @@ const NaesinParser = (() => {
       }).join('')}</tr>`).join('')
     }</tbody>`;
     if (!rows.length) $('classTable').innerHTML = '<tbody><tr><td class="muted">이 회차에 등록된 학생이 없어요.</td></tr></tbody>';
+    exportSpec.class = {
+      sheet: `${first.grade}학년 ${first.cls}반 ${labelOfSession(sk)}`, file: `${first.grade}학년 ${first.cls}반_${labelOfSession(sk)} 모의고사`, ascii: `class-${first.grade}-${first.cls}-${sk}`,
+      header: cols.flatMap((c) => c.xh), rows: rows.map((r) => cols.flatMap((c) => c.xv(r))),
+    };
   }
 
   // 반 전체 내신: 전체·과목군·학기별 평균 등급
@@ -1646,7 +1693,7 @@ const NaesinParser = (() => {
       ...(scale === 5 ? [{ id: 'g9', label: '9등급 환산', avg: (r) => { const v = wavg(r.ns.entries); return v == null ? null : convert5to9(v); } }] : []),
       ...NS_SUBJECTS.map((c) => ({ id: `c-${c}`, label: c, avg: (r) => wavg(r.ns.entries.filter((e) => e.category === c)) })),
       ...terms.map((k) => ({ id: `t-${k}`, label: termLabel(k).replace('학년 ', '-').replace('학기', ''), title: termLabel(k), avg: (r) => wavg(r.ns.entries.filter((e) => termKey(e) === k)) })),
-    ];
+    ].map((c) => ({ ...c, ...(c.avg ? xOne(c.title || (c.id === 'all' ? `전체 (${scale}등급제)` : c.label), (r) => r2(c.avg(r))) : xOne(c.label, c.val)) }));
     const sort = ui.sort && cols.some((c) => c.id === ui.sort.id) ? ui.sort : { id: 'no', dir: 1 };
     const col = cols.find((c) => c.id === sort.id);
     const keyOf = (r) => { const v = col.avg ? col.avg(r) : col.val(r); return v == null || v === '' ? Infinity : v; };
@@ -1664,6 +1711,10 @@ const NaesinParser = (() => {
         return `<td${c.id === 'name' ? ' class="l"' : ''}>${v == null || v === '' ? '<span class="muted">–</span>' : esc(v)}</td>`;
       }).join('')}</tr>`).join('')
     }</tbody>`;
+    exportSpec.class = {
+      sheet: `${first.grade}학년 ${first.cls}반 내신`, file: `${first.grade}학년 ${first.cls}반_내신`, ascii: `class-${first.grade}-${first.cls}-naesin`,
+      header: cols.flatMap((c) => c.xh), rows: rows.map((r) => cols.flatMap((c) => c.xv(r))),
+    };
   }
 
   // ───────── 전교생 (학년 전체 순위 · 상위권 · 이전 시험과 등수 비교) ─────────
@@ -1724,9 +1775,8 @@ const NaesinParser = (() => {
     const sk = opts.includes(ui.schoolSession) ? ui.schoolSession : (mockKeys[mockKeys.length - 1] || 'naesin');
     ui.schoolSession = sk;
     const isNs = sk === 'naesin';
-    const crits = isNs ? NS_CRITS : MOCK_CRITS;
-    const crit = crits.find((c) => c.id === (isNs ? ui.schoolNsCrit : ui.schoolCrit)) || crits.find((c) => c.id === (isNs ? 'all' : 'std'));
-    if (isNs) ui.schoolNsCrit = crit.id; else ui.schoolCrit = crit.id;
+    // 순위·증감은 늘 같은 기준 (모의고사: 표점합 / 내신: 전체 평균 등급). 다른 열을 눌러도 보이는 순서만 바뀜
+    const crit = isNs ? NS_CRITS[0] : MOCK_CRITS.find((c) => c.id === 'std');
 
     // 비교 대상: 모의고사는 이전 회차, 내신은 직전 학기까지
     let cmpOpts; let cmpLabel;
@@ -1765,7 +1815,7 @@ const NaesinParser = (() => {
     const total = ranked.length;
     const shown = top ? ranked.filter((r) => r.rank <= top) : [...ranked];
 
-    // ── 열 정의: id · 제목 · 칸 · 정렬 값(sortVal, first: 처음 누를 때 방향 1=오름 / -1=내림) · crit(순위 기준이 되는 열)
+    // ── 열 정의: id · 제목 · 칸 · 정렬 값(sortVal, first: 처음 누를 때 방향 1=오름 / -1=내림) · basis(순위 기준 열) · 엑셀(xh·xv)
     const deltaCell = (r) => {
       if (r.prev == null) return '<span class="delta new">NEW</span>';
       if (r.delta > 0) return `<span class="delta up">▲${r.delta}</span>`;
@@ -1774,42 +1824,44 @@ const NaesinParser = (() => {
     };
     const muted = '<span class="muted">–</span>';
     let cols = [
-      { id: 'rank', label: '순위', cell: (r) => `<b>${r.rank}</b>`, sortVal: (r) => r.rank, first: 1 },
+      { id: 'rank', label: '순위', cell: (r) => `<b>${r.rank}</b>`, sortVal: (r) => r.rank, first: 1, title: `${crit.label} 기준 순위`, ...xOne(`순위 (${isNs ? '전체 평균' : '표점합'})`, (r) => r.rank) },
       ...(prev ? [
-        { id: 'delta', label: '증감', cell: deltaCell, sortVal: (r) => r.delta, first: -1, title: '처음 누르면 많이 오른 순' },
-        { id: 'prev', label: '이전', cell: (r) => `<span class="muted">${r.prev ?? '–'}</span>`, sortVal: (r) => r.prev, first: 1 },
+        { id: 'delta', label: '증감', cell: deltaCell, sortVal: (r) => r.delta, first: -1, title: '처음 누르면 많이 오른 순', ...xOne('증감', (r) => (r.prev == null ? 'NEW' : r.delta)) },
+        { id: 'prev', label: '이전', cell: (r) => `<span class="muted">${r.prev ?? '–'}</span>`, sortVal: (r) => r.prev, first: 1, ...xOne('이전 순위', (r) => r.prev) },
       ] : []),
-      { id: 'cls', label: '반', cell: (r) => `${r.s.cls}반`, sortVal: (r) => r.s.cls * 1000 + r.s.no, first: 1 },
-      { id: 'no', label: '번호', cell: (r) => r.s.no, sortVal: (r) => r.s.no * 1000 + r.s.cls, first: 1 },
-      { id: 'name', label: '이름', cls: 'l', cell: (r) => (r.s.name ? esc(r.s.name) : muted), sortVal: (r) => r.s.name || null, first: 1 },
+      { id: 'cls', label: '반', cell: (r) => `${r.s.cls}반`, sortVal: (r) => r.s.cls * 1000 + r.s.no, first: 1, ...xOne('반', (r) => r.s.cls) },
+      { id: 'no', label: '번호', cell: (r) => r.s.no, sortVal: (r) => r.s.no * 1000 + r.s.cls, first: 1, ...xOne('번호', (r) => r.s.no) },
+      { id: 'name', label: '이름', cls: 'l', cell: (r) => (r.s.name ? esc(r.s.name) : muted), sortVal: (r) => r.s.name || null, first: 1, ...xOne('이름', (r) => r.s.name || null) },
     ];
-    const critCol = (c, label, cell) => ({ id: c.id, label, cell, crit: c.id, sortVal: null, first: c.better === 'high' ? -1 : 1, title: `누르면 ${c.label} 기준으로 순위를 매겨요` });
+    // 과목·합계 열: 누르면 그 값으로 보이는 순서만 바꿈 (처음 누를 때 좋은 쪽부터)
+    const scoreCol = (c, label, cell, sortVal, x) => ({ id: c.id, label, cell, sortVal, first: c.better === 'high' ? -1 : 1, basis: c.id === crit.id, title: c.id === crit.id ? '순위·증감의 기준이에요' : '', ...x });
     if (isNs) {
       const scale = ranked.some((r) => r.ns.scale === 9) ? 9 : 5;
       const avgCell = (v) => (v == null ? muted : v.toFixed(2));
       const all = NS_CRITS[0];
+      const allAvg = (r) => wavg(r.es);
+      const catAvg = (cat) => (r) => wavg(r.es.filter((e) => e.category === cat));
+      const g9 = (r) => { const v = wavg(r.es); return v == null ? null : convert5to9(v); };
       cols = cols.concat([
-        critCol(all, `전체 (${scale}등급제)`, (r) => avgCell(wavg(r.es))),
-        ...(scale === 5 ? [{ ...critCol(all, '9등급 환산', (r) => { const v = wavg(r.es); return v == null ? muted : convert5to9(v).toFixed(2); }), id: 'g9' }] : []),
-        ...NS_CRITS.slice(1).map((c) => critCol(c, c.cat, (r) => avgCell(wavg(r.es.filter((e) => e.category === c.cat))))),
+        scoreCol(all, `전체 (${scale}등급제)`, (r) => avgCell(allAvg(r)), allAvg, xOne(`전체 (${scale}등급제)`, (r) => r2(allAvg(r)))),
+        ...(scale === 5 ? [{ ...scoreCol(all, '9등급 환산', (r) => avgCell(g9(r)), g9, xOne('9등급 환산', (r) => r2(g9(r)))), id: 'g9', basis: false, title: '' }] : []),
+        ...NS_CRITS.slice(1).map((c) => scoreCol(c, c.cat, (r) => avgCell(catAvg(c.cat)(r)), catAvg(c.cat), xOne(c.cat, (r) => r2(catAvg(c.cat)(r))))),
       ]);
     } else {
       const tamN = Math.max(0, ...ranked.map((r) => r.sess.subjects.filter(isTam).length));
       const subjCell = (x, showLabel) => (x ? `${showLabel ? `<span class="muted" style="font-size:11px">${esc(x.label)}</span> ` : ''}${x.std != null ? esc(x.std) : ''} ${gradeChip(x.grade)}` : muted);
       const num = (v) => (v == null ? muted : esc(v));
       const mc = (id) => MOCK_CRITS.find((c) => c.id === id);
+      const tamOf = (i) => (r) => r.sess.subjects.filter(isTam)[i];
       cols = cols.concat([
-        ...['국어', '수학', '영어', '한국사'].map((c) => critCol(mc(c), c, (r) => subjCell(subjOf(r.sess, c)))),
-        ...[...Array(tamN).keys()].map((i) => ({ id: `t${i}`, label: `탐구${i + 1}`, cell: (r) => subjCell(r.sess.subjects.filter(isTam)[i], true), sortVal: (r) => { const x = r.sess.subjects.filter(isTam)[i]; return x ? x.std : null; }, first: -1 })),
-        critCol(mc('std'), '표점합', (r) => num(r.sm.std.total)),
-        critCol(mc('two'), '2개합', (r) => num(r.sm.two.total)),
-        critCol(mc('three'), '3개합', (r) => num(r.sm.three.total)),
-        critCol(mc('four'), '4개합', (r) => num(r.sm.four.total)),
+        ...['국어', '수학', '영어', '한국사'].map((c) => scoreCol(mc(c), c, (r) => subjCell(subjOf(r.sess, c)), mc(c).val, xSubj(c, (r) => subjOf(r.sess, c), { gradeOnly: c === '영어' || c === '한국사' }))),
+        ...[...Array(tamN).keys()].map((i) => ({ id: `t${i}`, label: `탐구${i + 1}`, cell: (r) => subjCell(tamOf(i)(r), true), sortVal: (r) => { const x = tamOf(i)(r); return x ? x.std : null; }, first: -1, ...xSubj(`탐구${i + 1}`, tamOf(i), { withName: true }) })),
+        ...['std', 'two', 'three', 'four'].map((id) => scoreCol(mc(id), { std: '표점합', two: '2개합', three: '3개합', four: '4개합' }[id], (r) => num(mc(id).val(r)), mc(id).val, xOne({ std: '표점합', two: '2개 영역합', three: '3개 영역합', four: '4개 영역합' }[id], mc(id).val))),
       ]);
     }
 
-    // ── 정렬: { id, dir } (dir 1 = 처음 누른 방향, -1 = 반대). 순위 기준 열을 누르면 id='rank'로 바뀜
-    const saved = ui.schoolSort && cols.some((c) => c.id === ui.schoolSort.id && !c.crit) ? ui.schoolSort : { id: 'rank', dir: 1 };
+    // ── 정렬: { id, dir } (dir 1 = 처음 누른 방향, -1 = 반대). 어느 열로 정렬해도 순위·증감은 그대로
+    const saved = ui.schoolSort && cols.some((c) => c.id === ui.schoolSort.id) ? ui.schoolSort : { id: 'rank', dir: 1 };
     ui.schoolSort = saved;
     const sortCol = cols.find((c) => c.id === saved.id);
     const asc = sortCol.first * saved.dir; // 1이면 값이 작은 것부터
@@ -1822,22 +1874,17 @@ const NaesinParser = (() => {
       const d = typeof va === 'string' ? va.localeCompare(vb, 'ko') : va - vb;
       return d * asc || byRank(a, b);
     });
-    // 화살표: 실제 값이 오름차순(▲)인지 내림차순(▼)인지. 순위 정렬일 때는 순위 기준 열에도 표시
-    const arrowFor = (c) => {
-      let a = null;
-      if (c.id === saved.id) a = asc;
-      else if (c.crit && c.crit === crit.id && saved.id === 'rank' && c.id !== 'g9') a = (crit.better === 'high' ? -1 : 1) * saved.dir;
-      return a == null ? '' : (a > 0 ? ' ▲' : ' ▼');
-    };
+    // 화살표: 실제 값이 오름차순(▲)인지 내림차순(▼)인지
+    const arrowFor = (c) => (c.id === saved.id ? (asc > 0 ? ' ▲' : ' ▼') : '');
 
     const label = isNs ? '내신 (전 학기)' : `${labelOfSession(sk)} 모의고사`;
     const classCount = new Set(ranked.map((r) => r.s.cls)).size;
     $('schoolTitle').textContent = `${g}학년 전교생 · ${label}`;
     $('schoolSub').textContent = [
       `올린 ${classCount}개 반 ${total}명 중 순위`,
-      `순위 기준: ${crit.label}${!isNs && crit.id !== 'std' ? ' (같으면 표점합 높은 순)' : ''}`,
+      `순위·증감: ${crit.label} 기준`,
       prev ? `비교: ${cmpLabel(cmp)}` : '',
-      '열 제목을 누르면 정렬 (과목·합계 열은 그 기준으로 순위) · 학생을 누르면 학생별 화면으로',
+      '열 제목을 누르면 보이는 순서만 바뀌어요 · 학생을 누르면 학생별 화면으로',
     ].filter(Boolean).join(' · ');
 
     // 요약: 보이는 학생의 반별 인원 · 오름/내림
@@ -1852,15 +1899,20 @@ const NaesinParser = (() => {
     }
     $('schoolStats').innerHTML = total ? `<span class="muted">${top && top < total ? `상위 ${top}명` : '전체'} 반별</span>${chips}${moves ? `<span class="stat-sep"></span>${moves}` : ''}` : '';
 
-    const isCrit = (c) => c.crit && c.crit === crit.id;
+    const isCrit = (c) => !!c.basis;
     const thAttr = (c) => {
       const cl = ['sortable', c.cls, isCrit(c) ? 'crit' : ''].filter(Boolean).join(' ');
-      return ` class="${cl}" ${c.crit ? `data-crit="${esc(c.crit)}"` : `data-sort="${esc(c.id)}"`}${c.title ? ` title="${esc(c.title)}"` : ''}`;
+      return ` class="${cl}" data-sort="${esc(c.id)}"${c.title ? ` title="${esc(c.title)}"` : ''}`;
     };
     $('schoolTable').innerHTML = total ? `<thead><tr>${cols.map((c) => `<th${thAttr(c)}>${esc(c.label)}${arrowFor(c)}</th>`).join('')}</tr></thead><tbody>${
       shown.map((r) => `<tr data-key="${r.key}" style="cursor:pointer" title="학생별 화면으로">${
         cols.map((c) => `<td${[c.cls, isCrit(c) ? 'crit' : ''].filter(Boolean).length ? ` class="${[c.cls, isCrit(c) ? 'crit' : ''].filter(Boolean).join(' ')}"` : ''}>${c.cell(r)}</td>`).join('')}</tr>`).join('')
     }</tbody>` : `<tbody><tr><td class="muted">${g}학년 ${esc(label)} 성적이 있는 학생이 없어요.</td></tr></tbody>`;
+    const range = top && top < total ? ` 상위 ${top}명` : '';
+    exportSpec.school = {
+      sheet: `${g}학년 전교생 ${isNs ? '내신' : labelOfSession(sk)}`, file: `${g}학년 전교생_${label}${range}`, ascii: `school-${g}-${isNs ? 'naesin' : sk}${range ? `-top${top}` : ''}`,
+      header: cols.flatMap((c) => c.xh), rows: shown.map((r) => cols.flatMap((c) => c.xv(r))),
+    };
   }
 
   // ───────── 등록 현황 ─────────
@@ -2381,23 +2433,15 @@ const NaesinParser = (() => {
   onSchool('selSchoolSession', (v) => { ui.schoolSession = v; });
   onSchool('selSchoolCompare', (v) => { if (ui.schoolSession === 'naesin') ui.schoolNsCompare = v; else ui.schoolCompare = v; });
   onSchool('selSchoolTop', (v) => { ui.schoolTop = Number(v); });
+  $('btnClassXlsx').addEventListener('click', () => downloadXlsx(exportSpec.class));
+  $('btnSchoolXlsx').addEventListener('click', () => downloadXlsx(exportSpec.school));
   $('schoolTable').addEventListener('click', (e) => {
-    // 과목·합계 열: 순위 기준으로 (이미 기준이면 순서만 뒤집기) / 나머지 열: 보이는 순서만
-    const th = e.target.closest('th[data-crit], th[data-sort]');
+    // 어느 열이든 보이는 순서만 바꿈 (순위·증감은 그대로)
+    const th = e.target.closest('th[data-sort]');
     if (th) {
-      const ns = ui.schoolSession === 'naesin';
-      const cur = ns ? ui.schoolNsCrit : ui.schoolCrit;
       const sort = ui.schoolSort || { id: 'rank', dir: 1 };
-      if (th.dataset.crit) {
-        if (th.dataset.crit === cur && sort.id === 'rank') ui.schoolSort = { id: 'rank', dir: -sort.dir };
-        else {
-          if (ns) ui.schoolNsCrit = th.dataset.crit; else ui.schoolCrit = th.dataset.crit;
-          ui.schoolSort = { id: 'rank', dir: 1 };
-        }
-      } else {
-        const id = th.dataset.sort;
-        ui.schoolSort = sort.id === id ? { id, dir: -sort.dir } : { id, dir: 1 };
-      }
+      const id = th.dataset.sort;
+      ui.schoolSort = sort.id === id ? { id, dir: -sort.dir } : { id, dir: 1 };
       render();
       return;
     }
