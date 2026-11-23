@@ -263,7 +263,7 @@
   }
 </style>
 
-<script>window.APP = { version: '2026.11.22-pc2' };</script>
+<script>window.APP = { version: '2026.11.23-pc3' };</script>
 </head>
 <body>
 <div class="wrap">
@@ -1540,7 +1540,9 @@ const NaesinParser = (() => {
     const W = 320; const H = 172; const top = 16; const bottom = 26; const plotH = H - top - bottom;
     const slot = (W - 16) / Math.max(1, pts.length);
     const cx = (i) => 8 + slot * i + slot / 2;
-    const gy = (g) => top + ((g - 1) / 8) * plotH;
+    // 등급 선은 위쪽 띠에만 그림: 9등급이어도 점·"9등급" 글자가 막대 아래쪽의 표준점수 숫자와 회차 이름을 가리지 않게
+    const lineH = plotH - 40;
+    const gy = (g) => top + ((Math.min(9, Math.max(1, g)) - 1) / 8) * lineH;
     let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="회차별 점수와 등급">`;
     svg += `<line x1="8" x2="${W - 8}" y1="${top + plotH}" y2="${top + plotH}" stroke="rgba(60,60,67,0.18)"/>`;
     pts.forEach((p, i) => {
