@@ -265,7 +265,7 @@
   }
 </style>
 
-<script>window.APP = { version: '2026.11.23-pc4' };</script>
+<script>window.APP = { version: '2026.11.24-pc5' };</script>
 </head>
 <body>
 <div class="wrap">
@@ -300,6 +300,7 @@
       <div class="row"><span class="tag ns">내신</span><span class="path"><span class="crumb">나이스</span><i>›</i><span class="crumb">학교생활기록부</span><i>›</i><span class="crumb">학생부 항목별 조회</span><i>›</i><span class="crumb">교과학습발달상황</span><i>›</i><span class="crumb">XLS 저장</span></span></div>
       <div class="row"><span class="tag mk">모의고사</span><span class="path">반별 성적일람표 PDF <span class="muted">(전국연합학력평가 성적일람표(학급별) · 3·6·9월 양식과 10월 양식 모두 · 한 반이 한 쪽)</span></span></div>
     </div>
+    <div class="notice-warn" role="note">⚠️ 성적은 <b>지금 쓰는 이 브라우저에만</b> 저장돼요. <b>브라우저가 바뀌거나</b>(크롬 ↔ 엣지), <b>브라우저 프로필(사용자)이 바뀌거나</b>, 시크릿 창이나 다른 PC에서 열면 성적이 보이지 않아요. 그때는 파일을 <b>다시 등록</b>하거나 [백업] 파일로 옮겨 주세요.</div>
     <input type="file" id="file" accept=".pdf,.xlsx,.xls,.json,application/pdf" multiple hidden>
     <div class="log" id="log"></div>
     <ol class="steps" id="howto">
@@ -463,6 +464,8 @@
   .bk-box > b { display: block; margin-bottom: 8px; }
   .bk-box p { margin: 8px 0 0; }
   .bk-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .notice-warn { margin-top: 12px; background: var(--orange-tint); color: var(--orange-text); border-radius: 10px; padding: 9px 12px; font-size: 13px; line-height: 1.55; }
+  .notice-warn b { color: var(--orange-text); }
   .bk-row input { flex: 1 1 150px; min-width: 0; border: 1px solid var(--sep); background: #fff; border-radius: 10px; padding: 7px 10px; font: inherit; }
 </style>
 <div class="modal-wrap closed no-print" id="backupModal">
