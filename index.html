@@ -265,7 +265,7 @@
   }
 </style>
 
-<script>window.APP = { version: '2026.11.24-pc5' };</script>
+<script>window.APP = { version: '2026.11.24-pc6' };</script>
 </head>
 <body>
 <div class="wrap">
@@ -1145,6 +1145,7 @@ const NaesinParser = (() => {
   async function handleFiles(fileList) {
     const all = [...fileList];
     openUpload(false); // 읽는 과정과 결과가 보이도록 (화면 아무 데나 떨어뜨린 경우에도)
+    $('log').innerHTML = ''; // 이어서 올리면 이전 기록은 지우고 이번에 올린 파일 결과만
     const backups = all.filter((x) => /\.json$/i.test(x.name));
     if (backups.length) { closeUpload(); readBackup(backups[0]); if (all.length === backups.length) return; }
     for (const f of all.filter((x) => !isPdf(x) && !isExcel(x) && !/\.json$/i.test(x.name))) addLog(`${f.name}: 엑셀(.xlsx)이나 PDF 파일만 올릴 수 있어요. (백업 파일은 .json)`, 'err');
