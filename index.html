@@ -139,6 +139,17 @@
 
   /* 학교 교육과정 (편성표 모양) */
   .cur-empty { background: var(--blue-tint); border-radius: 16px; padding: 16px 18px; }
+  .cur-create { border: 2px solid var(--blue); border-radius: 16px; padding: 16px 18px; }
+  .cur-create .cc-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; font-size: 13px; font-weight: 600; }
+  .cur-create select { border: 1px solid var(--sep); border-radius: 8px; padding: 5px 8px; font: inherit; }
+  .cc-opts { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; }
+  .cc-opts label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--fill2); border-radius: 12px; padding: 10px 12px; font-size: 13px; cursor: pointer; }
+  .cc-opts label .muted { width: 100%; padding-left: 22px; }
+  .cur-tips { background: var(--fill2); border-radius: 12px; padding: 9px 12px; margin: 0 0 10px; font-size: 12.5px; color: var(--label2); line-height: 1.55; }
+  .cur-table2 tr.bulk td { background: var(--blue-tint); padding: 8px; }
+  .cur-table2 textarea { width: 100%; border: 1px solid var(--sep); border-radius: 8px; padding: 8px; font: inherit; font-size: 13px; resize: vertical; }
+  .bulk-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+  .copy-sel { border: 1px solid var(--sep); border-radius: 8px; padding: 3px 6px; font-size: 12px; background: #fff; }
   .cur-empty p { margin: 6px 0 12px; color: var(--label2); font-size: 13px; }
   .cur-pending { border: 2px solid var(--blue); border-radius: 16px; padding: 14px 16px; margin-bottom: 14px; }
   .cur-pending-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--sep); font-size: 13px; }
@@ -297,7 +308,7 @@
   }
 </style>
 
-<script>window.APP = { version: '2026.11.25-pc7' };</script>
+<script>window.APP = { version: '2026.11.25-pc8' };</script>
 </head>
 <body>
 <div class="wrap">
@@ -460,18 +471,16 @@
 <div class="modal-wrap closed no-print" id="curModal">
   <section class="card modal" role="dialog" aria-modal="true" aria-labelledby="curTitle">
     <div class="card-head">
-      <div><h2 id="curTitle">학교 교육과정</h2><p>학교 교육과정 편성표(엑셀)를 올리면 입학년도별로 저장되고, 예상 등급 계산에서 학생 학년에 맞는 교육과정을 자동으로 써요. 입력하는 대로 이 브라우저에 저장돼요. <span id="curSaveState" class="muted"></span></p></div>
+      <div><h2 id="curTitle">학교 교육과정</h2><p>입학년도별로 학교 교육과정(학기별 지정 과목과 선택 묶음)을 만들어 두면, 예상 등급 계산에서 학생 학년에 맞는 교육과정을 자동으로 써요. 입력하는 대로 이 브라우저에 저장돼요. <span id="curSaveState" class="muted"></span></p></div>
       <button class="x-btn" data-close="curModal" title="닫기" aria-label="닫기">✕</button>
     </div>
     <div class="cur-bar">
       <div class="tabs" id="curGradeTabs"></div>
       <span class="spacer"></span>
-      <button class="btn small primary" id="curXlsxBtn" title="학교 교육과정 편성표 엑셀 올리기">편성표 엑셀 불러오기</button>
-      <button class="btn small" id="curNew" title="편성표 없이 빈 교육과정 만들기">직접 만들기</button>
+      <button class="btn small primary" id="curNew" title="새 입학년도 교육과정 만들기">+ 새 교육과정</button>
       <button class="btn small" id="curExport" title="교육과정을 파일로 저장해 다른 선생님과 나누기">파일로 내보내기</button>
       <button class="btn small" id="curImport" title="내보낸 교육과정 파일 불러오기">파일 불러오기</button>
       <input type="file" id="curFile" accept=".json,application/json" hidden>
-      <input type="file" id="curXlsx" accept=".xlsx,.xls" hidden>
     </div>
     <div class="log" id="curLog"></div>
     <div id="curBody"></div>
@@ -2003,7 +2012,7 @@ const NaesinParser = (() => {
 
   // ───────── 학교 교육과정 (예상 등급 계산용) ─────────
   // { [입학년도]: { entry, name, source, savedAt, terms: [{ year, term, groups: [{ name, pick(0=모두 이수), courses: [{ name, credit, subject, type, counted }] }] }] } }
-  //   학교 "교육과정 편성표" 엑셀을 그대로 올려서 만듦 (지정 → 모두 이수, 선택N → 선택 과목수만큼 고르는 묶음)
+  //   직접 만듦: 지정 과목 묶음(모두 이수) + 선택 묶음(N개 중 몇 개). 과목명 자동완성·여러 과목 붙여넣기·묶음 복사로 빠르게 입력
   //   학생 학년 + 지금 학년도로 입학년도를 계산해서 그 학생의 교육과정을 찾음
   //   학생 성적이 아니라서 "성적 데이터 삭제"로 지워지지 않음. 파일로 내보내 다른 학교·시트와 나눠 쓸 수 있음
   const CUR_SUBJECTS = ['국어', '수학', '영어', '사회', '과학', '제2외국어/한문', '기술·가정/정보', '체육', '예술', '교양', '기타'];
@@ -2063,7 +2072,6 @@ const NaesinParser = (() => {
     if (changed) saveCur();
   }
   let curKey = null;
-  let curPending = null; // 편성표 엑셀을 읽은 결과 (저장 전 확인)
   const curOpenTerms = new Set(); // 펼쳐 둔 학기 (다시 그려도 유지)
 
   // 모달 열고 닫기 (교육과정·예상 등급) — 바깥 클릭·Esc·✕로 닫음
@@ -2075,11 +2083,70 @@ const NaesinParser = (() => {
   };
   const topModal = () => [...document.querySelectorAll('.modal-wrap:not(.closed)')].pop();
 
+  // ── 과목 목록 (2022 개정 교육과정 과목명 · 교과 · 과목 유형 · 기준 학점): 과목명 자동완성·자동 채움에 씀
+  const CUR_CATALOG = [["공통국어1","국어","공통 과목",4],["공통국어2","국어","공통 과목",4],["체육1","체육","일반 선택",3],["체육2","체육","일반 선택",3],["스포츠 문화","체육","진로 선택",2],["스포츠 과학","체육","진로 선택",2],["스포츠 생활1","체육","융합 선택",3],["스포츠 생활2","체육","융합 선택",3],["한국사1","사회","공통 과목",3],["한국사2","사회","공통 과목",3],["통합사회1","사회","공통 과목",4],["통합사회2","사회","공통 과목",4],["통합과학1","과학","공통 과목",4],["통합과학2","과학","공통 과목",4],["과학탐구실험1","과학","공통 과목",1],["과학탐구실험2","과학","공통 과목",1],["공통수학1","수학","공통 과목",4],["기본수학1","수학","공통 과목",4],["공통수학2","수학","공통 과목",4],["기본수학2","수학","공통 과목",4],["공통영어1","영어","공통 과목",4],["기본영어1","영어","공통 과목",4],["공통영어2","영어","공통 과목",4],["기본영어2","영어","공통 과목",4],["음악","예술","일반 선택",3],["미술","예술","일반 선택",3],["화법과 언어","국어","일반 선택",4],["문학","국어","일반 선택",4],["영어Ⅰ","영어","일반 선택",4],["직무 영어","영어","진로 선택",4],["대수","수학","일반 선택",4],["미적분Ⅰ","수학","일반 선택",4],["직무 수학","수학","진로 선택",4],["운동과 건강","체육","진로 선택",3],["정보","기술·가정/정보","일반 선택",4],["독일어","제2외국어/한문","일반 선택",4],["중국어","제2외국어/한문","일반 선택",4],["일본어","제2외국어/한문","일반 선택",4],["한문","제2외국어/한문","일반 선택",4],["세계시민과 지리","사회","일반 선택",4],["세계사","사회","일반 선택",4],["사회와 문화","사회","일반 선택",4],["현대사회와 윤리","사회","일반 선택",4],["정치","사회","진로 선택",4],["기후변화와 지속가능한 세계","사회","융합 선택",4],["물리학","과학","일반 선택",4],["화학","과학","일반 선택",4],["생명과학","과학","일반 선택",4],["지구과학","과학","일반 선택",4],["기후변화와 환경생태","과학","융합 선택",4],["심화 체육 전공 실기","체육","진로 선택",3],["음악 연주와 창작","예술","진로 선택",3],["미술 창작","예술","진로 선택",3],["영어Ⅱ","영어","일반 선택",4],["확률과 통계","수학","일반 선택",4],["미적분Ⅱ","수학","진로 선택",4],["인공지능 기초","기술·가정/정보","진로 선택",4],["독일어 회화","제2외국어/한문","진로 선택",4],["중국어 회화","제2외국어/한문","진로 선택",4],["일본어 회화","제2외국어/한문","진로 선택",4],["언어생활과 한자","제2외국어/한문","융합 선택",4],["한국지리 탐구","사회","진로 선택",4],["동아시아 역사 기행","사회","진로 선택",4],["법과 사회","사회","진로 선택",4],["경제","사회","진로 선택",4],["윤리와 사상","사회","진로 선택",4],["사회문제 탐구","사회","융합 선택",4],["전자기와 양자","과학","진로 선택",4],["물질과 에너지","과학","진로 선택",4],["세포와 물질대사","과학","진로 선택",4],["지구시스템과학","과학","진로 선택",4],["융합과학 탐구","과학","융합 선택",4],["이산 수학","수학","진로 선택",4],["스포츠 개론","체육","진로 선택",3],["고급 체육 전공 실기","체육","진로 선택",3],["독서와 작문","국어","일반 선택",4],["직무 의사소통","국어","진로 선택",4],["경제 수학","수학","진로 선택",4],["영어 독해와 작문","영어","일반 선택",4],["미디어 영어","영어","융합 선택",4],["전문 수학","수학","진로 선택",4],["주제 탐구 독서","국어","진로 선택",4],["기하","수학","진로 선택",4],["심화 영어","영어","진로 선택",4],["도시의 미래 탐구","사회","진로 선택",4],["인문학과 윤리","사회","진로 선택",4],["국제 관계의 이해","사회","진로 선택",4],["인간과 철학","교양","진로 선택",3],["인간과 심리","교양","진로 선택",3],["교육의 이해","교양","진로 선택",3],["보건","교양","진로 선택",3],["역학과 에너지","과학","진로 선택",4],["화학 반응의 세계","과학","진로 선택",4],["생물의 유전","과학","진로 선택",4],["행성우주과학","과학","진로 선택",4],["정보과학","기술·가정/정보","진로 선택",4],["육상","체육","진로 선택",3],["스포츠 경기 기술","체육","진로 선택",3],["스포츠 경기 분석","체육","진로 선택",3],["국제 정치","사회","진로 선택",4],["현대 세계의 변화","사회","진로 선택",4],["매체 의사소통","국어","융합 선택",4],["언어생활 탐구","국어","융합 선택",4],["수학과 문화","수학","융합 선택",4],["심화 영어 독해와 작문","영어","진로 선택",4],["실생활 영어 회화","영어","융합 선택",4],["고급 대수","수학","진로 선택",4],["독서 토론과 글쓰기","국어","융합 선택",4],["수학과제 탐구","수학","융합 선택",4],["영어 발표와 토론","영어","진로 선택",4],["데이터 과학","기술·가정/정보","진로 선택",4],["여행지리","사회","융합 선택",4],["역사로 탐구하는 현대 세계","사회","융합 선택",4],["윤리문제 탐구","사회","융합 선택",4],["과학의 역사와 문화","과학","융합 선택",4],["기초 체육 전공 실기","체육","진로 선택",3],["스포츠 경기 체력","체육","진로 선택",3],["스포츠 교육","체육","융합 선택",3]];
+  const nameKey = (s) => String(s || '').replace(/\s+/g, '');
+  const CATALOG_MAP = new Map(CUR_CATALOG.map(([n, s, t, c]) => [nameKey(n), { name: n, subject: s, type: t, credit: c }]));
+  const catalogOf = (name) => CATALOG_MAP.get(nameKey(name)) || null;
+  // 목록에 없는 과목: 이름으로 교과를 짐작
+  function guessSubject(name) {
+    const n = nameKey(name);
+    if (/일본어|중국어|독일어|프랑스어|스페인어|러시아어|아랍어|베트남어|한문|한자/.test(n)) return '제2외국어/한문';
+    if (/영어/.test(n)) return '영어';
+    if (/국어|문학|독서|화법|작문|언어|매체/.test(n)) return '국어';
+    if (/수학|대수|미적분|확률|통계|기하/.test(n)) return '수학';
+    if (/체육|스포츠|운동|육상/.test(n)) return '체육';
+    if (/음악|미술|연극|영화|예술|창작|감상/.test(n)) return '예술';
+    if (/정보|인공지능|데이터|프로그래밍|기술|가정|공학/.test(n)) return '기술·가정/정보';
+    if (/과학|물리|화학|생명|지구|역학|에너지|양자|우주|생태|유전|세포/.test(n)) return '과학';
+    if (/사회|역사|한국사|윤리|지리|정치|경제|법|철학|세계|도시/.test(n)) return '사회';
+    if (/철학|심리|교육|보건|진로|논리|환경|종교/.test(n)) return '교양';
+    return '기타';
+  }
+  // 1학년 공통 과목 (전국 공통, 2022 개정)
+  const COMMON_1 = (term) => [['공통국어', 4, '국어'], ['공통수학', 4, '수학'], ['공통영어', 4, '영어'], ['한국사', 3, '사회'], ['통합사회', 4, '사회'], ['통합과학', 4, '과학'], ['과학탐구실험', 1, '과학']]
+    .map(([n, c, s]) => ({ name: `${n}${term}`, credit: c, subject: s, type: '공통 과목', counted: countedByRule(s, '공통 과목', `${n}${term}`) }));
+  // 묶음의 흔한 학점 (학교가 실제로 운영하는 학점이라, 새 과목에 그대로 씀)
+  const groupCredit = (g) => {
+    const cnt = new Map(); for (const c of g.courses) if (c.credit) cnt.set(c.credit, (cnt.get(c.credit) || 0) + 1);
+    return [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  };
+  const autoCredit = new WeakSet(); // 학점을 사람이 아직 안 고친 과목 → 과목을 고르면 학점도 채움
+  function makeCourse(name, g, credit) {
+    const cat = catalogOf(name);
+    const subject = cat ? cat.subject : guessSubject(name);
+    const type = cat ? cat.type : (name ? '일반 선택' : (g && g.courses.length ? g.courses[g.courses.length - 1].type : '일반 선택'));
+    const co = { name: cat ? cat.name : name, credit: credit ?? (g && groupCredit(g)) ?? (cat ? cat.credit : 3), subject, type, counted: countedByRule(subject, type, name) };
+    if (credit == null) autoCredit.add(co);
+    return co;
+  }
+  // 여러 과목 한꺼번에: 한 줄에 한 과목. "대수 3", 엑셀에서 복사한 "수학 [탭] 대수 [탭] 3"도 됨
+  //   학점: 그 줄에 숫자가 하나뿐일 때만 학점으로 봄(편성표 한 줄을 통째로 복사하면 숫자가 여러 개라 무시)
+  //         학점이 없는 줄은 → 다른 줄에 적은 학점(가장 흔한 것) → 이 묶음의 학점 → 과목 목록의 기준 학점
+  function parseBulk(text, g) {
+    const isNum = (c) => /^\d+(\.\d+)?$/.test(c);
+    const items = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((line) => {
+      const cells = line.split(/\t|,/).map((s) => s.trim()).filter(Boolean);
+      const nums = cells.filter(isNum);
+      let credit = cells.length > 1 && nums.length === 1 ? Number(nums[0]) : null;
+      let name = cells.find((c) => catalogOf(c)) || cells.find((c) => !isNum(c) && !/^(공통|일반|진로|융합)\s*(과목|선택)$|^지정$|^선택\d+$|^개설$/.test(c)) || '';
+      const m = /^(.*\S)\s+(\d+(?:\.\d+)?)$/.exec(name);
+      if (m && !catalogOf(name)) { name = m[1]; if (credit == null) credit = Number(m[2]); }
+      return { name, credit };
+    }).filter((x) => x.name);
+    const cnt = new Map(); for (const x of items) if (x.credit != null) cnt.set(x.credit, (cnt.get(x.credit) || 0) + 1);
+    const typed = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    return items.map((x) => makeCourse(x.name, g, x.credit ?? typed ?? undefined));
+  }
+  let curCreate = false; // 새 교육과정 만들기 화면
+  let curBulk = null; // 여러 과목 입력 칸을 연 묶음 'ti|gi'
+
   function openCurriculum(key) {
     const keys = planKeys();
     const stu = db.students[ui.stu];
     const mine = stu ? String(entryOfGrade(stu.grade)) : null;
     curKey = key != null && planOf(key) ? String(key) : (mine && planOf(mine) ? mine : (keys.includes(curKey) ? curKey : keys[keys.length - 1] || null));
+    curCreate = !keys.length; curBulk = null;
     $('curLog').innerHTML = '';
     renderCurriculum();
     openModal('curModal');
@@ -2105,68 +2172,74 @@ const NaesinParser = (() => {
     return `${p.terms.length}개 학기 · 과목 ${all.length}개(성적 반영 ${all.filter((c) => c.counted).length}개) · 총 ${tc.min === tc.max ? tc.min : `${tc.min}~${tc.max}`}학점`;
   };
   const opt = (vals, v, fmtv = (x) => x) => vals.map((x) => `<option value="${esc(x)}"${String(x) === String(v) ? ' selected' : ''}>${esc(fmtv(x))}</option>`).join('');
+  const yearChoices = () => [...Array(7).keys()].map((i) => academicYear() - 3 + i);
+
+  function renderCreate() {
+    const keys = planKeys();
+    const stu = db.students[ui.stu];
+    const cands = [stu ? entryOfGrade(stu.grade) : null, academicYear(), academicYear() - 1, academicYear() - 2, academicYear() + 1].filter(Boolean);
+    const def = cands.find((y) => !planOf(y)) || academicYear() + 1;
+    return `<div class="cur-create">
+      <b>새 교육과정 만들기</b>
+      <label class="cc-row">입학년도 <select id="ccEntry">${yearChoices().map((y) => `<option value="${y}"${y === def ? ' selected' : ''}${planOf(y) ? ' disabled' : ''}>${y}학년도 입학생${gradeOfEntry(y) >= 1 && gradeOfEntry(y) <= 3 ? ` (지금 ${gradeOfEntry(y)}학년)` : ''}${planOf(y) ? ' · 이미 있음' : ''}</option>`).join('')}</select></label>
+      <div class="cc-opts">
+        <label><input type="radio" name="ccMode" value="common" checked> <b>1학년 공통 과목을 채워서 시작</b><span class="muted">공통국어·공통수학·공통영어·한국사·통합사회·통합과학·과학탐구실험 (1·2학기)</span></label>
+        <label><input type="radio" name="ccMode" value="copy"${keys.length ? '' : ' disabled'}> <b>다른 입학년도 교육과정 복사</b> <select id="ccFrom"${keys.length ? '' : ' disabled'}>${keys.map((k) => `<option value="${esc(k)}">${esc(k)}학년도 입학생</option>`).join('') || '<option>없음</option>'}</select><span class="muted">작년 교육과정을 복사해서 바뀐 부분만 고치면 빨라요</span></label>
+        <label><input type="radio" name="ccMode" value="blank"> <b>빈 교육과정</b><span class="muted">1학년 1학기 ~ 3학년 2학기 빈 학기만 만들어요</span></label>
+      </div>
+      <div style="display:flex;gap:8px"><button class="btn primary" data-act="create">만들기</button>${keys.length ? '<button class="btn" data-act="createCancel">취소</button>' : ''}</div>
+    </div>`;
+  }
 
   function renderCurriculum() {
     const keys = planKeys();
     if (!keys.includes(curKey)) curKey = keys[keys.length - 1] || null;
+    if (!keys.length) curCreate = true;
     $('curGradeTabs').innerHTML = keys.map((k) => {
       const g = gradeOfEntry(k);
-      return `<button data-k="${esc(k)}" class="${k === curKey ? 'on' : ''}">${esc(k)} 입학생${g >= 1 && g <= 3 ? ` <span class="muted">(지금 ${g}학년)</span>` : ''}</button>`;
+      return `<button data-k="${esc(k)}" class="${k === curKey && !curCreate ? 'on' : ''}">${esc(k)} 입학생${g >= 1 && g <= 3 ? ` <span class="muted">(지금 ${g}학년)</span>` : ''}</button>`;
     }).join('');
     $('curGradeTabs').classList.toggle('hidden', !keys.length);
-    let html = '';
-    // 편성표를 읽은 뒤 저장 전 확인
-    if (curPending) {
-      const years = [...Array(9).keys()].map((i) => academicYear() - 5 + i);
-      html += `<div class="cur-pending"><b>편성표를 읽었어요. 확인하고 저장해 주세요.</b>${curPending.map((p, pi) => `
-        <div class="cur-pending-row">
-          <div><span class="muted">${esc(p.source)}</span><br>${esc(planSummary(p))}</div>
-          <label>입학년도 <select data-pend="${pi}">${opt(years, p.entry || '', (x) => `${x}학년도 입학생`)}${p.entry ? '' : '<option value="" selected>골라 주세요</option>'}</select></label>
-          ${p.entry && planOf(p.entry) ? `<span class="warn-text">이미 있는 ${esc(p.entry)} 입학생 교육과정을 바꿔요</span>` : ''}
-          <div class="cur-pending-terms">${p.terms.map((t) => `<span>${t.year}-${t.term} <b>${esc(termCredits(t).text)}</b></span>`).join('')}</div>
-        </div>`).join('')}
-        <p class="muted" style="margin:6px 0 10px">학기별 학점을 편성표의 "학기별 교과 이수학점" 줄과 비교해 보세요. 성적 반영은 2022 개정 기준(체육·예술·교양, 과학탐구실험, 사회·과학 융합 선택 제외)으로 정했고, 저장한 뒤 과목마다 바꿀 수 있어요.</p>
-        <div style="display:flex;gap:8px"><button class="btn small" data-act="pendCancel">취소</button><button class="btn small primary" data-act="pendSave">저장</button></div>
-      </div>`;
-    }
+    const datalist = `<datalist id="curCatalog">${CUR_CATALOG.map(([n, s, t, c]) => `<option value="${esc(n)}">${esc(`${s} · ${t} · ${c}학점`)}</option>`).join('')}</datalist>`;
+    if (curCreate) { $('curBody').innerHTML = renderCreate(); return; }
     const p = planOf(curKey);
-    if (!p) {
-      html += curPending ? '' : `<div class="cur-empty">
-        <b>학교 교육과정 편성표(엑셀)를 올려 주세요.</b>
-        <p>나이스·학교에서 쓰는 "○○학년도 입학생 교육과정 편성표" 엑셀을 그대로 올리면 과목·학점·선택 그룹을 자동으로 읽어요. 입학년도마다 한 번만 올리면 돼요.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="xlsx">편성표 엑셀 불러오기</button><button class="btn" data-act="newPlan">직접 만들기</button></div>
-      </div>`;
-      $('curBody').innerHTML = html;
-      return;
-    }
     const g = gradeOfEntry(curKey);
-    html += `<div class="cur-plan-head">
-        <div><select data-f="entry" aria-label="입학년도">${opt([...new Set([...[...Array(9).keys()].map((i) => academicYear() - 5 + i), Number(curKey)])].sort(), Number(curKey), (x) => `${x}학년도 입학생`)}</select>${g >= 1 && g <= 3 ? ` <span class="muted">· 지금 ${g}학년 학생</span>` : ''}<br>
-        <span class="muted">${esc(planSummary(p))}${p.source ? ` · ${esc(p.source)}` : ''}</span></div>
+    let html = datalist + `<div class="cur-plan-head">
+        <div><select data-f="entry" aria-label="입학년도">${opt([...new Set([...yearChoices(), Number(curKey)])].sort(), Number(curKey), (x) => `${x}학년도 입학생`)}</select>${g >= 1 && g <= 3 ? ` <span class="muted">· 지금 ${g}학년 학생</span>` : ''}<br>
+        <span class="muted">${esc(planSummary(p))}</span></div>
         <button class="del" data-act="delPlan" title="이 교육과정 삭제">교육과정 삭제 ✕</button>
-      </div>`;
+      </div>
+      <div class="cur-tips">💡 과목명을 치면 목록에서 고를 수 있고, 고르면 <b>교과·과목 유형·학점·성적 반영이 자동으로</b> 채워져요. 과목명 칸에서 <b>Enter</b>를 누르면 다음 줄이 생겨요. 과목이 많은 선택 묶음은 <b>[여러 과목 한꺼번에]</b>로 붙여 넣으세요.</div>`;
+    const termOpts = (ti) => p.terms.map((t, i) => (i === ti ? '' : `<option value="${i}">${t.year}학년 ${t.term}학기로 복사</option>`)).join('');
     html += p.terms.map((t, ti) => {
       const tk = `${curKey}|${t.year}-${t.term}`;
       return `<details class="cur-term2" data-tk="${esc(tk)}"${curOpenTerms.has(tk) ? ' open' : ''}>
         <summary><b>${t.year}학년 ${t.term}학기</b> <span class="muted">· ${termCourseCount(t)}과목 이수 · </span><b class="cur-sum" data-t="${ti}">${esc(termCredits(t).text)}</b><span class="spacer"></span><span class="muted cur-open-hint">펼치기</span></summary>
         <table class="cur-table2"><thead><tr><th class="l">과목</th><th>교과</th><th>과목 유형</th><th>학점</th><th title="예상 등급 평균에 넣는 과목">성적 반영</th><th></th></tr></thead><tbody>
         ${t.groups.map((gr, gi) => `<tr class="grp"><td colspan="6"><div class="grp-head">
-            <input type="text" data-t="${ti}" data-g="${gi}" data-f="gname" value="${esc(gr.name)}" placeholder="묶음 이름 (예: 지정 과목, 선택8)" aria-label="묶음 이름">
-            <select data-t="${ti}" data-g="${gi}" data-f="pick" aria-label="고르는 과목 수">${opt([...Array(Math.max(gr.courses.length, gr.pick || 0) + 1).keys()], gr.pick || 0, (x) => (x ? `${gr.courses.length}과목 중 ${x}개 선택` : '모두 이수 (지정)'))}</select>
+            <input type="text" data-t="${ti}" data-g="${gi}" data-f="gname" value="${esc(gr.name)}" placeholder="묶음 이름" aria-label="묶음 이름">
+            <select data-t="${ti}" data-g="${gi}" data-f="pick" aria-label="고르는 과목 수">${opt([...Array(Math.max(gr.courses.length, gr.pick || 0, 1) + 1).keys()], gr.pick || 0, (x) => (x ? `${gr.courses.length}과목 중 ${x}개 선택` : '모두 이수 (지정)'))}</select>
             <span class="spacer"></span>
             <button class="btn small" data-act="addCourse" data-t="${ti}" data-g="${gi}">+ 과목</button>
+            <button class="btn small" data-act="bulk" data-t="${ti}" data-g="${gi}">여러 과목 한꺼번에</button>
+            ${p.terms.length > 1 ? `<select class="copy-sel" data-copy-t="${ti}" data-copy-g="${gi}" aria-label="다른 학기로 복사"><option value="">다른 학기로 복사…</option>${termOpts(ti)}</select>` : ''}
             <button class="del" data-act="delGroup" data-t="${ti}" data-g="${gi}" title="이 묶음 삭제">묶음 삭제</button>
           </div></td></tr>
-          ${gr.courses.map((co, ci) => `<tr${co.counted ? '' : ' class="off"'}>
-            <td><input type="text" data-t="${ti}" data-g="${gi}" data-c="${ci}" data-f="name" value="${esc(co.name)}" placeholder="과목명" aria-label="과목명"></td>
+          ${curBulk === `${ti}|${gi}` ? `<tr class="bulk"><td colspan="6">
+            <textarea data-bulk rows="6" placeholder="과목 이름을 한 줄에 하나씩 써 주세요. 예)&#10;대수&#10;미적분Ⅰ 3&#10;물리학 3&#10;엑셀·나이스 표에서 복사해 붙여 넣어도 돼요."></textarea>
+            <div class="bulk-foot"><button class="btn small primary" data-act="bulkAdd" data-t="${ti}" data-g="${gi}">추가</button><button class="btn small" data-act="bulkCancel">닫기</button>
+            <span class="muted">"과목 학점"처럼 뒤에 학점을 붙이면 그 학점으로, 없으면 ${groupCredit(gr) ? `이 묶음의 학점(${groupCredit(gr)})` : '과목 목록의 기준 학점'}으로 넣어요.</span></div>
+          </td></tr>` : ''}
+          ${gr.courses.length ? gr.courses.map((co, ci) => `<tr${co.counted ? '' : ' class="off"'}>
+            <td><input type="text" list="curCatalog" data-t="${ti}" data-g="${gi}" data-c="${ci}" data-f="name" value="${esc(co.name)}" placeholder="과목명 (치면 목록이 나와요)" aria-label="과목명"></td>
             <td><select data-t="${ti}" data-g="${gi}" data-c="${ci}" data-f="subject" aria-label="교과">${opt(CUR_SUBJECTS, co.subject)}</select></td>
             <td><select data-t="${ti}" data-g="${gi}" data-c="${ci}" data-f="type" aria-label="과목 유형">${opt(CUR_TYPES.includes(co.type) ? CUR_TYPES : [co.type || '기타', ...CUR_TYPES.filter((x) => x !== co.type)], co.type || '기타')}</select></td>
             <td><input type="number" min="0" max="10" data-t="${ti}" data-g="${gi}" data-c="${ci}" data-f="credit" value="${esc(co.credit)}" aria-label="학점"></td>
             <td><input type="checkbox" data-t="${ti}" data-g="${gi}" data-c="${ci}" data-f="counted"${co.counted ? ' checked' : ''} aria-label="성적 반영"></td>
             <td><button class="del" data-act="delCourse" data-t="${ti}" data-g="${gi}" data-c="${ci}" title="이 과목 삭제">✕</button></td>
-          </tr>`).join('')}`).join('')}
+          </tr>`).join('') : `<tr><td colspan="6" class="muted" style="text-align:left;padding:8px">아직 과목이 없어요. [+ 과목]이나 [여러 과목 한꺼번에]로 넣어 주세요.</td></tr>`}`).join('')}
         </tbody></table>
-        <div class="cur-term-foot"><button class="btn small" data-act="addGroup" data-t="${ti}">+ 선택 묶음 추가</button><span class="spacer"></span><button class="del" data-act="delTerm" data-t="${ti}">학기 삭제 ✕</button></div>
+        <div class="cur-term-foot"><button class="btn small" data-act="addGroup" data-t="${ti}">+ 선택 묶음 추가</button>${t.groups.some((x) => !x.pick) ? '' : `<button class="btn small" data-act="addFixed" data-t="${ti}">+ 지정 과목 묶음</button>`}<span class="spacer"></span><button class="del" data-act="delTerm" data-t="${ti}">학기 삭제 ✕</button></div>
       </details>`;
     }).join('');
     const missing = [];
@@ -2179,78 +2252,6 @@ const NaesinParser = (() => {
     for (const el of $('curBody').querySelectorAll('.cur-sum')) { const t = p.terms[Number(el.dataset.t)]; if (t) el.textContent = termCredits(t).text; }
   }
 
-  // 편성표 엑셀 읽기: '과목'·'선택 그룹' 머리글 줄과 그 아래 '1학기/2학기' 줄로 칸을 찾음
-  function parseCurRows(rows, sheetName, fileName, many) {
-    const norm = (v) => String(v ?? '').replace(/\s+/g, '');
-    const hi = rows.findIndex((r) => r && r.some((v) => norm(v) === '과목') && r.some((v) => norm(v).includes('선택그룹')));
-    if (hi < 0) return null;
-    const H = rows[hi].map(norm);
-    const col = (test) => H.findIndex((s) => test(s || ''));
-    const cGroup = col((s) => s.startsWith('교과(군)') || s === '교과군' || s === '교과');
-    const cCourse = col((s) => s === '과목');
-    const cType = col((s) => s.startsWith('과목유형'));
-    const cSel = col((s) => s.includes('선택그룹'));
-    const cPick = col((s) => s.includes('선택과목수'));
-    const cOpen = col((s) => s.includes('개설'));
-    const sub = rows[hi + 1] || [];
-    const sems = [];
-    let year = null;
-    for (let c = 0; c < Math.max(H.length, sub.length); c += 1) {
-      const m = /^(\d)학년/.exec(H[c] || ''); if (m) year = Number(m[1]);
-      const t = /^([12])학기/.exec(norm(sub[c])); if (t && year) sems.push({ c, year, term: Number(t[1]) });
-    }
-    if (!sems.length || cCourse < 0) return null;
-    const title = rows.slice(0, hi).flat().map(norm).join(' ');
-    const ey = (/(\d{4})학년도입학생/.exec(title) || /(\d{4})/.exec(norm(sheetName)) || /(\d{4})학년도/.exec(title) || [])[1];
-    const terms = new Map();
-    let lastGroup = '';
-    for (let r = hi + 2; r < rows.length; r += 1) {
-      const row = rows[r]; if (!row) continue;
-      const name = String(row[cCourse] ?? '').replace(/\s+/g, ' ').trim();
-      if (!name) { if (/학기별|합계|이수학점|교과영역/.test(norm(row[0]))) break; continue; }
-      if (cOpen >= 0 && /미개설/.test(norm(row[cOpen]))) continue;
-      const groupText = (cGroup >= 0 ? String(row[cGroup] ?? '').trim() : '') || lastGroup; lastGroup = groupText;
-      const subject = curSubjectOf(groupText);
-      const type = cType >= 0 ? String(row[cType] ?? '').replace(/\s+/g, ' ').trim() : '';
-      const sel = cSel >= 0 ? norm(row[cSel]) : '';
-      const pick = !sel || sel === '지정' ? 0 : Math.max(1, Number(row[cPick]) || 1);
-      const gname = pick ? sel : '지정 과목';
-      for (const s of sems) {
-        const credit = Number(row[s.c]); if (!(credit > 0)) continue;
-        const tk = `${s.year}-${s.term}`;
-        if (!terms.has(tk)) terms.set(tk, { year: s.year, term: s.term, groups: new Map() });
-        const T = terms.get(tk);
-        if (!T.groups.has(gname)) T.groups.set(gname, { name: gname, pick, courses: [] });
-        const G = T.groups.get(gname); if (pick) G.pick = Math.max(G.pick, pick);
-        G.courses.push({ name, credit, subject, type, counted: countedByRule(subject, type, name) });
-      }
-    }
-    const order = (g) => (g.pick ? Number((/\d+/.exec(g.name) || [999])[0]) : -1);
-    const termList = [...terms.values()].sort((a, b) => a.year - b.year || a.term - b.term)
-      .map((T) => ({ year: T.year, term: T.term, groups: [...T.groups.values()].sort((a, b) => order(a) - order(b)) }));
-    if (!termList.length) return null;
-    return { entry: ey ? Number(ey) : null, source: `${fileName}${many ? ` › ${sheetName}` : ''}`, terms: termList };
-  }
-  async function importCurXlsx(file) {
-    $('curLog').innerHTML = '';
-    try {
-      const X = await loadXlsx();
-      const wb = X.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' });
-      const found = [];
-      for (const name of wb.SheetNames) {
-        const rows = X.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null, raw: true });
-        const p = parseCurRows(rows, name, file.name, wb.SheetNames.length > 1);
-        if (p) found.push(p);
-      }
-      if (!found.length) { curLog('err', `${file.name}: 교육과정 편성표를 찾지 못했어요. "과목"·"선택 그룹"·"1학년 1학기…" 머리글이 있는 편성표 엑셀인지 확인해 주세요.`); return; }
-      curPending = found;
-      renderCurriculum();
-      $('curBody').scrollTop = 0;
-    } catch (e) {
-      curLog('err', `${file.name}: 읽지 못했어요. (${e.message})`);
-    }
-  }
-
   // 교육과정 편집: 글자 입력은 다시 그리지 않고 값만 저장(입력 중 커서 유지), 구조가 바뀌면 다시 그림
   function curTarget(el) {
     const p = planOf(curKey); if (!p) return {};
@@ -2259,9 +2260,23 @@ const NaesinParser = (() => {
     const co = g && el.dataset.c != null ? g.courses[Number(el.dataset.c)] : null;
     return { p, t, g, co };
   }
+  // 과목을 목록에서 고르면 교과·유형·성적 반영(학점은 아직 안 고쳤을 때만)을 채우고, 그 줄 화면도 바꿈
+  function fillFromCatalog(el, g, co) {
+    const cat = catalogOf(co.name); if (!cat) return;
+    co.name = cat.name; co.subject = cat.subject; co.type = cat.type;
+    if (autoCredit.has(co)) { const others = { courses: g.courses.filter((x) => x !== co && !autoCredit.has(x)) }; co.credit = groupCredit(others) ?? cat.credit; }
+    co.counted = countedByRule(co.subject, co.type, co.name);
+    const tr = el.closest('tr');
+    tr.querySelector('[data-f="subject"]').value = co.subject;
+    const ts = tr.querySelector('[data-f="type"]'); if (![...ts.options].some((o) => o.value === co.type)) ts.add(new Option(co.type, co.type)); ts.value = co.type;
+    tr.querySelector('[data-f="credit"]').value = co.credit ?? '';
+    tr.querySelector('[data-f="counted"]').checked = co.counted;
+    tr.classList.toggle('off', !co.counted);
+    updateCurSums();
+  }
   function onCurInput(e) {
     const el = e.target;
-    if (el.dataset.pend != null && curPending) { curPending[Number(el.dataset.pend)].entry = Number(el.value) || null; if (e.type === 'change') renderCurriculum(); return; }
+    if (el.dataset.copyT != null) { if (e.type === 'change' && el.value !== '') copyGroup(Number(el.dataset.copyT), Number(el.dataset.copyG), Number(el.value)); return; }
     const f = el.dataset.f; if (!f) return;
     if (f === 'entry') { // 입학년도 바꾸기
       const to = String(el.value);
@@ -2272,9 +2287,9 @@ const NaesinParser = (() => {
     }
     const { t, g, co } = curTarget(el);
     if (f === 'gname' && g) g.name = el.value;
-    else if (f === 'pick' && g) { g.pick = Number(el.value); updateCurSums(); }
-    else if (f === 'name' && co) co.name = el.value;
-    else if (f === 'credit' && co) { co.credit = el.value === '' ? null : Number(el.value); updateCurSums(); }
+    else if (f === 'pick' && g) { g.pick = Number(el.value); updateCurSums(); if (e.type === 'change') { const s = el.closest('details').querySelector('summary .muted'); if (s) s.textContent = `· ${termCourseCount(t)}과목 이수 · `; } }
+    else if (f === 'name' && co) { co.name = el.value; if (catalogOf(el.value)) fillFromCatalog(el, g, co); }
+    else if (f === 'credit' && co) { co.credit = el.value === '' ? null : Number(el.value); autoCredit.delete(co); updateCurSums(); }
     else if (f === 'counted' && co) { co.counted = el.checked; el.closest('tr').classList.toggle('off', !co.counted); }
     else if ((f === 'subject' || f === 'type') && co) {
       co[f] = el.value;
@@ -2284,24 +2299,52 @@ const NaesinParser = (() => {
     } else return;
     if (t) saveCur();
   }
+  // 과목명 칸에서 Enter → 바로 아래에 새 과목 줄 (한글 입력 중에는 무시)
+  function onCurKey(e) {
+    const el = e.target;
+    if (e.key !== 'Enter' || e.isComposing || el.dataset.f !== 'name') return;
+    e.preventDefault();
+    const { t, g, co } = curTarget(el); if (!g) return;
+    const ci = g.courses.indexOf(co);
+    g.courses.splice(ci + 1, 0, makeCourse('', g));
+    saveCur(); renderCurriculum();
+    const next = $('curBody').querySelector(`input[data-t="${el.dataset.t}"][data-g="${el.dataset.g}"][data-c="${ci + 1}"][data-f="name"]`);
+    if (next) next.focus();
+    void t;
+  }
+  function copyGroup(fromT, gi, toT) {
+    const p = planOf(curKey); const src = p.terms[fromT].groups[gi]; const dst = p.terms[toT];
+    dst.groups.push(JSON.parse(JSON.stringify(src)));
+    curOpenTerms.add(`${curKey}|${dst.year}-${dst.term}`);
+    curLog('ok', `"${src.name}" 묶음(${src.courses.length}과목)을 ${dst.year}학년 ${dst.term}학기에 복사했어요.`);
+    saveCur(); renderCurriculum();
+  }
+  function createPlan() {
+    const entry = Number($('ccEntry').value);
+    if (!entry || planOf(entry)) { curLog('err', '입학년도를 골라 주세요.'); return; }
+    const mode = ($('curBody').querySelector('input[name="ccMode"]:checked') || {}).value || 'blank';
+    let terms;
+    if (mode === 'copy') {
+      const from = planOf($('ccFrom').value); if (!from) { curLog('err', '복사할 교육과정을 골라 주세요.'); return; }
+      terms = JSON.parse(JSON.stringify(from.terms));
+    } else {
+      terms = [];
+      for (let y = 1; y <= 3; y += 1) for (let tm = 1; tm <= 2; tm += 1) terms.push({ year: y, term: tm, groups: [{ name: '지정 과목', pick: 0, courses: mode === 'common' && y === 1 ? COMMON_1(tm) : [] }] });
+    }
+    cur[entry] = { entry, name: `${entry}학년도 입학생`, source: mode === 'copy' ? `${$('ccFrom').value}학년도 입학생 교육과정에서 복사` : '직접 입력', savedAt: new Date().toISOString(), terms };
+    curKey = String(entry); curCreate = false;
+    const first = terms.find((t) => !(mode === 'common' && t.year === 1)) || terms[0];
+    if (first) curOpenTerms.add(`${curKey}|${first.year}-${first.term}`);
+    curLog('ok', `${entry}학년도 입학생 교육과정을 만들었어요. ${mode === 'copy' ? '바뀐 과목만 고쳐 주세요.' : '학기를 펼쳐 과목과 선택 묶음을 넣어 주세요.'}`);
+    saveCur(); renderCurriculum();
+  }
   function onCurClick(e) {
     const tab = e.target.closest('#curGradeTabs button');
-    if (tab) { curKey = tab.dataset.k; renderCurriculum(); return; }
+    if (tab) { curKey = tab.dataset.k; curCreate = false; curBulk = null; renderCurriculum(); return; }
     const b = e.target.closest('[data-act]'); if (!b) return;
     const act = b.dataset.act;
-    if (act === 'xlsx') { $('curXlsx').click(); return; }
-    if (act === 'newPlan') { newPlan(); return; }
-    if (act === 'pendCancel') { curPending = null; renderCurriculum(); return; }
-    if (act === 'pendSave') {
-      if (curPending.some((p) => !p.entry)) { curLog('err', '입학년도를 골라 주세요.'); return; }
-      const now = new Date().toISOString();
-      for (const p of curPending) cur[p.entry] = { entry: p.entry, name: `${p.entry}학년도 입학생`, source: p.source, savedAt: now, terms: p.terms };
-      curKey = String(curPending[curPending.length - 1].entry);
-      curLog('ok', `${curPending.map((p) => `${p.entry}학년도 입학생`).join(', ')} 교육과정을 저장했어요. 학기를 펼쳐서 과목·학점·성적 반영을 확인해 보세요.`);
-      curPending = null;
-      saveCur(); renderCurriculum();
-      return;
-    }
+    if (act === 'create') { createPlan(); return; }
+    if (act === 'createCancel') { curCreate = false; renderCurriculum(); return; }
     const p = planOf(curKey); if (!p) return;
     const { t, g } = curTarget(b);
     const twoStep = (label) => { // 확인창 대신 한 번 더 누르게 함
@@ -2310,40 +2353,42 @@ const NaesinParser = (() => {
       setTimeout(() => { if (b.isConnected) { b.dataset.armed = ''; b.textContent = old; b.style.color = ''; } }, 4000);
       return false;
     };
-    const newCourse = (src) => ({ name: '', credit: (src && src.credit) || 3, subject: (src && src.subject) || '국어', type: (src && src.type) || '일반 선택', counted: true });
     let focusSel = null;
-    if (act === 'delPlan') { if (!twoStep(`한 번 더 누르면 ${curKey} 입학생 교육과정이 지워져요`)) return; delete cur[curKey]; curKey = null; }
+    if (act === 'bulk') { curBulk = `${b.dataset.t}|${b.dataset.g}`; renderCurriculum(); const ta = $('curBody').querySelector('textarea[data-bulk]'); if (ta) ta.focus(); return; }
+    if (act === 'bulkCancel') { curBulk = null; renderCurriculum(); return; }
+    if (act === 'bulkAdd' && g) {
+      const ta = $('curBody').querySelector('textarea[data-bulk]');
+      const list = parseBulk(ta ? ta.value : '', g);
+      if (!list.length) { curLog('warn', '넣을 과목 이름이 없어요. 한 줄에 하나씩 써 주세요.'); return; }
+      g.courses.push(...list);
+      const unknown = list.filter((c) => !catalogOf(c.name)).map((c) => c.name);
+      curLog(unknown.length ? 'warn' : 'ok', `${list.length}과목을 "${g.name}"에 넣었어요.${unknown.length ? ` 목록에 없는 과목(${unknown.slice(0, 5).join(', ')}${unknown.length > 5 ? ' 외' : ''})은 교과·유형을 짐작해서 넣었으니 확인해 주세요.` : ''}`);
+      curBulk = null;
+    } else if (act === 'delPlan') { if (!twoStep(`한 번 더 누르면 ${curKey} 입학생 교육과정이 지워져요`)) return; delete cur[curKey]; curKey = null; }
     else if (act === 'delTerm') { if (!twoStep('한 번 더 누르면 이 학기가 지워져요')) return; p.terms.splice(Number(b.dataset.t), 1); }
     else if (act === 'addTerm') {
       const [y, tm] = b.dataset.tk.split('-').map(Number);
       p.terms.push({ year: y, term: tm, groups: [{ name: '지정 과목', pick: 0, courses: [] }] });
       p.terms.sort((a, c) => a.year - c.year || a.term - c.term);
       curOpenTerms.add(`${curKey}|${y}-${tm}`);
-    } else if (act === 'addGroup' && t) {
-      const n = Math.max(0, ...p.terms.flatMap((x) => x.groups.map((gr) => Number((/선택(\d+)/.exec(gr.name) || [0, 0])[1])))) + 1;
-      t.groups.push({ name: `선택${n}`, pick: 1, courses: [newCourse(), newCourse()] });
-      focusSel = `input[data-t="${b.dataset.t}"][data-g="${t.groups.length - 1}"][data-f="name"]`;
-    } else if (act === 'delGroup' && t) { if (!twoStep('한 번 더 누르면 묶음 삭제')) return; t.groups.splice(Number(b.dataset.g), 1); }
-    else if (act === 'addCourse' && g) { g.courses.push(newCourse(g.courses[g.courses.length - 1])); focusSel = `input[data-t="${b.dataset.t}"][data-g="${b.dataset.g}"][data-c="${g.courses.length - 1}"][data-f="name"]`; }
+    } else if ((act === 'addGroup' || act === 'addFixed') && t) {
+      if (act === 'addFixed') t.groups.unshift({ name: '지정 과목', pick: 0, courses: [] });
+      else {
+        const n = Math.max(0, ...p.terms.flatMap((x) => x.groups.map((gr) => Number((/선택(\d+)/.exec(gr.name) || [0, 0])[1])))) + 1;
+        t.groups.push({ name: `선택${n}`, pick: 1, courses: [] });
+        curBulk = `${b.dataset.t}|${t.groups.length - 1}`; // 새 선택 묶음은 바로 여러 과목 입력
+      }
+    } else if (act === 'delGroup' && t) { if (!twoStep('한 번 더 누르면 묶음 삭제')) return; t.groups.splice(Number(b.dataset.g), 1); curBulk = null; }
+    else if (act === 'addCourse' && g) { g.courses.push(makeCourse('', g)); focusSel = `input[data-t="${b.dataset.t}"][data-g="${b.dataset.g}"][data-c="${g.courses.length - 1}"][data-f="name"]`; }
     else if (act === 'delCourse' && g) g.courses.splice(Number(b.dataset.c), 1);
     else return;
     saveCur();
     renderCurriculum();
+    if (curBulk) { const ta = $('curBody').querySelector('textarea[data-bulk]'); if (ta) ta.focus(); }
     if (focusSel) { const el = $('curBody').querySelector(focusSel); if (el) el.focus(); }
   }
-  // 직접 만들기: 입학년도를 고르면 1-1 ~ 3-2 빈 학기를 만듦
-  function newPlan() {
-    const stu = db.students[ui.stu];
-    // 고른 학생의 입학년도 → 지금 1·2·3학년 입학년도 중 아직 없는 것
-    const cands = [stu ? entryOfGrade(stu.grade) : null, academicYear(), academicYear() - 1, academicYear() - 2, academicYear() + 1].filter(Boolean);
-    const entry = cands.find((y) => !planOf(y)) || Math.max(...planKeys().map(Number)) + 1;
-    const terms = [];
-    for (let y = 1; y <= 3; y += 1) for (let tm = 1; tm <= 2; tm += 1) terms.push({ year: y, term: tm, groups: [{ name: '지정 과목', pick: 0, courses: [] }] });
-    cur[entry] = { entry, name: `${entry}학년도 입학생`, source: '직접 입력', savedAt: new Date().toISOString(), terms };
-    curKey = String(entry);
-    curLog('ok', `${entry}학년도 입학생 교육과정을 만들었어요. 입학년도가 다르면 위에서 바꾸고, 학기를 펼쳐 과목을 넣어 주세요.`);
-    saveCur(); renderCurriculum();
-  }
+  // 새 교육과정 만들기 화면 열기
+  function newPlan() { curCreate = true; curBulk = null; $('curLog').innerHTML = ''; renderCurriculum(); }
 
   // 내보내기·불러오기 (학생 성적은 들어 있지 않음)
   async function exportCurriculum() {
@@ -2397,7 +2442,7 @@ const NaesinParser = (() => {
         if (cleaned && cleaned.terms.length) { cur[entry] = cleaned; got.push(`${entry}학년도 입학생`); }
       }
       saveCur();
-      if (got.length) { curKey = String(got.length ? Number(got[got.length - 1].slice(0, 4)) : curKey); curLog('ok', `${file.name}: ${got.join(', ')} 교육과정을 불러왔어요. (같은 입학년도에 있던 내용은 바뀌었어요)`); } else curLog('warn', `${file.name}: 불러올 교육과정이 없어요.`);
+      if (got.length) { curKey = String(Number(got[got.length - 1].slice(0, 4))); curCreate = false; curLog('ok', `${file.name}: ${got.join(', ')} 교육과정을 불러왔어요. (같은 입학년도에 있던 내용은 바뀌었어요)`); } else curLog('warn', `${file.name}: 불러올 교육과정이 없어요.`);
       renderCurriculum();
     } catch (e) {
       curLog('err', `${file.name}: 읽지 못했어요. (${e.message})`);
@@ -2474,7 +2519,7 @@ const NaesinParser = (() => {
     const keys = planKeys();
     const pick = keys.length ? `<div class="d-plan">교육과정 <select data-plan-key aria-label="교육과정">${keys.map((k) => `<option value="${esc(k)}"${k === design.planKey ? ' selected' : ''}>${esc(k)}학년도 입학생${Number(k) === mine ? ' (이 학생)' : ''}</option>`).join('')}${design.planKey ? '' : '<option value="" selected>골라 주세요</option>'}</select>${design.planKey && Number(design.planKey) !== mine ? ` <span class="warn-text">이 학생은 ${mine}학년도 입학생이에요</span>` : ''}</div>` : '';
     if (!c) {
-      html += `<div class="d-card"><b>이수 예정 과목</b>${pick}<p class="muted" style="margin:6px 0 10px">${keys.length ? '예상 등급에 쓸 교육과정을 골라 주세요.' : `${mine}학년도 입학생 교육과정이 아직 없어요. 학교 교육과정 편성표(엑셀)를 올리면 예상 등급까지 계산할 수 있어요.`}</p><button class="btn small primary" data-act="toCur">교육과정 ${keys.length ? '보기' : '올리기'}</button></div>`;
+      html += `<div class="d-card"><b>이수 예정 과목</b>${pick}<p class="muted" style="margin:6px 0 10px">${keys.length ? '예상 등급에 쓸 교육과정을 골라 주세요.' : `${mine}학년도 입학생 교육과정이 아직 없어요. 학교 교육과정(학기별 과목과 선택 묶음)을 만들면 예상 등급까지 계산할 수 있어요.`}</p><button class="btn small primary" data-act="toCur">교육과정 ${keys.length ? '보기' : '만들기'}</button></div>`;
     } else {
       const fut = futureTerms(c, ns);
       html += `<div class="d-card"><b>이수 예정 과목</b>${pick}<p class="muted" style="margin:6px 0 0">${fut.length ? `성적이 있는 학기 다음인 ${fut.map(({ t }) => `${t.year}-${t.term}`).join(', ')}학기 과목이에요. 지정 과목은 미리 골라 두었어요. 선택 묶음에서 들을 과목을 고르고 예상 등급을 넣어 주세요.` : '남은 학기가 없어요. 교육과정의 모든 학기에 이미 성적이 있어요.'}</p></div>`;
@@ -2678,9 +2723,8 @@ const NaesinParser = (() => {
   $('curExport').addEventListener('click', exportCurriculum);
   $('curImport').addEventListener('click', () => $('curFile').click());
   $('curFile').addEventListener('change', (e) => { if (e.target.files[0]) importCurriculum(e.target.files[0]); e.target.value = ''; });
-  $('curXlsxBtn').addEventListener('click', () => $('curXlsx').click());
   $('curNew').addEventListener('click', newPlan);
-  $('curXlsx').addEventListener('change', (e) => { if (e.target.files[0]) importCurXlsx(e.target.files[0]); e.target.value = ''; });
+  $('curModal').addEventListener('keydown', onCurKey);
   // 펼친 학기 기억 (다시 그려도 유지)
   $('curBody').addEventListener('toggle', (e) => { const d = e.target; if (d.dataset && d.dataset.tk) { if (d.open) curOpenTerms.add(d.dataset.tk); else curOpenTerms.delete(d.dataset.tk); } }, true);
   $('designModal').addEventListener('change', onDesignChange);
