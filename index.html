@@ -145,6 +145,11 @@
   .cc-opts { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 14px; }
   .cc-opts label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: var(--fill2); border-radius: 12px; padding: 10px 12px; font-size: 13px; cursor: pointer; }
   .cc-opts label .muted { width: 100%; padding-left: 22px; }
+  .cc-opts label.dis { opacity: .45; cursor: default; }
+  .cc-skip { margin: -2px 0 10px; font-size: 13px; }
+  .cc-skip b { color: var(--label); }
+  .cur-done { font-size: 11px; font-weight: 600; color: var(--label3); background: var(--fill2); border-radius: 6px; padding: 2px 7px; margin-left: 4px; }
+  .cur-term2.graded > summary b { color: var(--label3); }
   .cur-tips { background: var(--fill2); border-radius: 12px; padding: 9px 12px; margin: 0 0 10px; font-size: 12.5px; color: var(--label2); line-height: 1.55; }
   .cur-table2 tr.bulk td { background: var(--blue-tint); padding: 8px; }
   .cur-table2 textarea { width: 100%; border: 1px solid var(--sep); border-radius: 8px; padding: 8px; font: inherit; font-size: 13px; resize: vertical; }
@@ -308,7 +313,7 @@
   }
 </style>
 
-<script>window.APP = { version: '2026.11.25-pc8' };</script>
+<script>window.APP = { version: '2026.11.25-pc9' };</script>
 </head>
 <body>
 <div class="wrap">
@@ -2173,22 +2178,52 @@ const NaesinParser = (() => {
   };
   const opt = (vals, v, fmtv = (x) => x) => vals.map((x) => `<option value="${esc(x)}"${String(x) === String(v) ? ' selected' : ''}>${esc(fmtv(x))}</option>`).join('');
   const yearChoices = () => [...Array(7).keys()].map((i) => academicYear() - 3 + i);
+  // 그 입학년도 학생들의 성적이 이미 있는 마지막 학기 ('0-0'이면 없음)
+  //   지난 학년도는 날짜로(지금 2학년이면 1학년 끝), 올해는 올려 둔 내신 성적으로 판단
+  function doneUpto(entry) {
+    const g = gradeOfEntry(entry);
+    let last = g > 3 ? '3-2' : g >= 2 ? `${g - 1}-2` : '0-0';
+    for (const st of students()) {
+      if (!st.naesin || entryOfGrade(st.grade) !== Number(entry)) continue;
+      const ts = nsTerms(st.naesin); const t = ts[ts.length - 1];
+      if (t && t > last) last = t;
+    }
+    return last;
+  }
+  const termAfter = (k) => { const [y, t] = k.split('-').map(Number); return t >= 2 ? `${y + 1}-1` : `${y}-2`; };
 
   function renderCreate() {
     const keys = planKeys();
     const stu = db.students[ui.stu];
     const cands = [stu ? entryOfGrade(stu.grade) : null, academicYear(), academicYear() - 1, academicYear() - 2, academicYear() + 1].filter(Boolean);
-    const def = cands.find((y) => !planOf(y)) || academicYear() + 1;
+    const allDone = (y) => doneUpto(y) >= '3-2';
+    const def = cands.find((y) => !planOf(y) && !allDone(y)) || academicYear() + 1;
     return `<div class="cur-create">
       <b>새 교육과정 만들기</b>
-      <label class="cc-row">입학년도 <select id="ccEntry">${yearChoices().map((y) => `<option value="${y}"${y === def ? ' selected' : ''}${planOf(y) ? ' disabled' : ''}>${y}학년도 입학생${gradeOfEntry(y) >= 1 && gradeOfEntry(y) <= 3 ? ` (지금 ${gradeOfEntry(y)}학년)` : ''}${planOf(y) ? ' · 이미 있음' : ''}</option>`).join('')}</select></label>
+      <label class="cc-row">입학년도 <select id="ccEntry">${yearChoices().map((y) => `<option value="${y}"${y === def ? ' selected' : ''}${planOf(y) || allDone(y) ? ' disabled' : ''}>${y}학년도 입학생${gradeOfEntry(y) >= 1 && gradeOfEntry(y) <= 3 ? ` (지금 ${gradeOfEntry(y)}학년)` : ''}${planOf(y) ? ' · 이미 있음' : allDone(y) ? ' · 졸업/성적 모두 있음' : ''}</option>`).join('')}</select></label>
+      <p class="cc-skip muted" id="ccSkip"></p>
       <div class="cc-opts">
-        <label><input type="radio" name="ccMode" value="common" checked> <b>1학년 공통 과목을 채워서 시작</b><span class="muted">공통국어·공통수학·공통영어·한국사·통합사회·통합과학·과학탐구실험 (1·2학기)</span></label>
+        <label id="ccCommon"><input type="radio" name="ccMode" value="common" checked> <b>1학년 공통 과목을 채워서 시작</b><span class="muted">공통국어·공통수학·공통영어·한국사·통합사회·통합과학·과학탐구실험 (1·2학기)</span></label>
         <label><input type="radio" name="ccMode" value="copy"${keys.length ? '' : ' disabled'}> <b>다른 입학년도 교육과정 복사</b> <select id="ccFrom"${keys.length ? '' : ' disabled'}>${keys.map((k) => `<option value="${esc(k)}">${esc(k)}학년도 입학생</option>`).join('') || '<option>없음</option>'}</select><span class="muted">작년 교육과정을 복사해서 바뀐 부분만 고치면 빨라요</span></label>
-        <label><input type="radio" name="ccMode" value="blank"> <b>빈 교육과정</b><span class="muted">1학년 1학기 ~ 3학년 2학기 빈 학기만 만들어요</span></label>
+        <label><input type="radio" name="ccMode" value="blank"> <b>빈 교육과정</b><span class="muted">남은 학기를 빈 학기로만 만들어요</span></label>
       </div>
       <div style="display:flex;gap:8px"><button class="btn primary" data-act="create">만들기</button>${keys.length ? '<button class="btn" data-act="createCancel">취소</button>' : ''}</div>
     </div>`;
+  }
+
+  // 만들기 화면: 고른 입학년도에서 성적이 있는 학기는 빼고 만든다고 알려 줌
+  function updateCreateHint() {
+    const sel = $('ccEntry'); if (!sel) return;
+    const done = doneUpto(sel.value);
+    $('ccSkip').innerHTML = done === '0-0' ? '1학년 1학기부터 3학년 2학기까지 만들어요.'
+      : `<b>${esc(termLabel(done).replace('1학년 2학기', '1학년').replace('2학년 2학기', '1·2학년'))}</b>${done.endsWith('-2') ? '은' : '까지는'} 이미 성적이 있어서 빼고, <b>${esc(termLabel(termAfter(done)))}</b>부터 만들어요.`;
+    const common = $('ccCommon'); const radio = common.querySelector('input');
+    const skip = done >= '1-2';
+    radio.disabled = skip; common.classList.toggle('dis', skip);
+    if (skip && radio.checked) {
+      const copy = $('curBody').querySelector('input[name="ccMode"][value="copy"]');
+      (copy && !copy.disabled ? copy : $('curBody').querySelector('input[name="ccMode"][value="blank"]')).checked = true;
+    }
   }
 
   function renderCurriculum() {
@@ -2201,7 +2236,7 @@ const NaesinParser = (() => {
     }).join('');
     $('curGradeTabs').classList.toggle('hidden', !keys.length);
     const datalist = `<datalist id="curCatalog">${CUR_CATALOG.map(([n, s, t, c]) => `<option value="${esc(n)}">${esc(`${s} · ${t} · ${c}학점`)}</option>`).join('')}</datalist>`;
-    if (curCreate) { $('curBody').innerHTML = renderCreate(); return; }
+    if (curCreate) { $('curBody').innerHTML = renderCreate(); updateCreateHint(); return; }
     const p = planOf(curKey);
     const g = gradeOfEntry(curKey);
     let html = datalist + `<div class="cur-plan-head">
@@ -2210,11 +2245,13 @@ const NaesinParser = (() => {
         <button class="del" data-act="delPlan" title="이 교육과정 삭제">교육과정 삭제 ✕</button>
       </div>
       <div class="cur-tips">💡 과목명을 치면 목록에서 고를 수 있고, 고르면 <b>교과·과목 유형·학점·성적 반영이 자동으로</b> 채워져요. 과목명 칸에서 <b>Enter</b>를 누르면 다음 줄이 생겨요. 과목이 많은 선택 묶음은 <b>[여러 과목 한꺼번에]</b>로 붙여 넣으세요.</div>`;
+    const done = doneUpto(curKey);
     const termOpts = (ti) => p.terms.map((t, i) => (i === ti ? '' : `<option value="${i}">${t.year}학년 ${t.term}학기로 복사</option>`)).join('');
     html += p.terms.map((t, ti) => {
       const tk = `${curKey}|${t.year}-${t.term}`;
-      return `<details class="cur-term2" data-tk="${esc(tk)}"${curOpenTerms.has(tk) ? ' open' : ''}>
-        <summary><b>${t.year}학년 ${t.term}학기</b> <span class="muted">· ${termCourseCount(t)}과목 이수 · </span><b class="cur-sum" data-t="${ti}">${esc(termCredits(t).text)}</b><span class="spacer"></span><span class="muted cur-open-hint">펼치기</span></summary>
+      const graded = `${t.year}-${t.term}` <= done;
+      return `<details class="cur-term2${graded ? ' graded' : ''}" data-tk="${esc(tk)}"${curOpenTerms.has(tk) ? ' open' : ''}>
+        <summary><b>${t.year}학년 ${t.term}학기</b> <span class="muted">· ${termCourseCount(t)}과목 이수 · </span><b class="cur-sum" data-t="${ti}">${esc(termCredits(t).text)}</b>${graded ? '<span class="cur-done" title="이미 성적이 있는 학기라 예상 등급 계산에 쓰지 않아요. 지워도 돼요.">성적 있음 · 계산에 안 씀</span>' : ''}<span class="spacer"></span><span class="muted cur-open-hint">펼치기</span></summary>
         <table class="cur-table2"><thead><tr><th class="l">과목</th><th>교과</th><th>과목 유형</th><th>학점</th><th title="예상 등급 평균에 넣는 과목">성적 반영</th><th></th></tr></thead><tbody>
         ${t.groups.map((gr, gi) => `<tr class="grp"><td colspan="6"><div class="grp-head">
             <input type="text" data-t="${ti}" data-g="${gi}" data-f="gname" value="${esc(gr.name)}" placeholder="묶음 이름" aria-label="묶음 이름">
@@ -2243,7 +2280,7 @@ const NaesinParser = (() => {
       </details>`;
     }).join('');
     const missing = [];
-    for (let y = 1; y <= 3; y += 1) for (let tm = 1; tm <= 2; tm += 1) if (!p.terms.some((t) => t.year === y && t.term === tm)) missing.push(`${y}-${tm}`);
+    for (let y = 1; y <= 3; y += 1) for (let tm = 1; tm <= 2; tm += 1) if (`${y}-${tm}` > done && !p.terms.some((t) => t.year === y && t.term === tm)) missing.push(`${y}-${tm}`);
     if (missing.length) html += `<div class="cur-add-term">${missing.map((k) => `<button class="btn small" data-act="addTerm" data-tk="${k}">+ ${k.replace('-', '학년 ')}학기</button>`).join('')}</div>`;
     $('curBody').innerHTML = html;
   }
@@ -2276,6 +2313,7 @@ const NaesinParser = (() => {
   }
   function onCurInput(e) {
     const el = e.target;
+    if (el.id === 'ccEntry') { updateCreateHint(); return; }
     if (el.dataset.copyT != null) { if (e.type === 'change' && el.value !== '') copyGroup(Number(el.dataset.copyT), Number(el.dataset.copyG), Number(el.value)); return; }
     const f = el.dataset.f; if (!f) return;
     if (f === 'entry') { // 입학년도 바꾸기
@@ -2331,11 +2369,14 @@ const NaesinParser = (() => {
       terms = [];
       for (let y = 1; y <= 3; y += 1) for (let tm = 1; tm <= 2; tm += 1) terms.push({ year: y, term: tm, groups: [{ name: '지정 과목', pick: 0, courses: mode === 'common' && y === 1 ? COMMON_1(tm) : [] }] });
     }
+    const done = doneUpto(entry);
+    terms = terms.filter((t) => `${t.year}-${t.term}` > done);
+    if (!terms.length) { curLog('err', `${entry}학년도 입학생은 모든 학기에 이미 성적이 있어서 만들 학기가 없어요.`); return; }
     cur[entry] = { entry, name: `${entry}학년도 입학생`, source: mode === 'copy' ? `${$('ccFrom').value}학년도 입학생 교육과정에서 복사` : '직접 입력', savedAt: new Date().toISOString(), terms };
     curKey = String(entry); curCreate = false;
     const first = terms.find((t) => !(mode === 'common' && t.year === 1)) || terms[0];
     if (first) curOpenTerms.add(`${curKey}|${first.year}-${first.term}`);
-    curLog('ok', `${entry}학년도 입학생 교육과정을 만들었어요. ${mode === 'copy' ? '바뀐 과목만 고쳐 주세요.' : '학기를 펼쳐 과목과 선택 묶음을 넣어 주세요.'}`);
+    curLog('ok', `${entry}학년도 입학생 교육과정을 만들었어요${done === '0-0' ? '' : ` (${termLabel(terms[0].year + '-' + terms[0].term)}부터)`}. ${mode === 'copy' ? '바뀐 과목만 고쳐 주세요.' : '학기를 펼쳐 과목과 선택 묶음을 넣어 주세요.'}`);
     saveCur(); renderCurriculum();
   }
   function onCurClick(e) {
