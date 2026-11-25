@@ -195,9 +195,12 @@
   .cb-cats button { border: 0; background: #fff; border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 12px; font-weight: 600; color: var(--label2); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
   .cb-cats button.on { background: var(--label); color: #fff; }
   .cb-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
-  .cb-pool { max-height: 168px; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px; }
-  .cb-sec { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .cb-sec-h { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--label2); min-width: 92px; }
+  .cb-pool { max-height: 210px; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px; }
+  .cb-sec { display: grid; grid-template-columns: 70px 1fr; gap: 8px; align-items: start; }
+  .cb-sec + .cb-sec { border-top: 1px solid var(--sep); padding-top: 8px; }
+  .cb-sec-h { display: flex; align-items: baseline; gap: 5px; font-size: 12px; font-weight: 700; color: var(--label2); padding-top: 6px; line-height: 1.35; word-break: keep-all; }
+  .cb-sec-h .cb-dot { transform: translateY(-1px); }
+  .cb-sec-items { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
   .cb-item { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--sep); border-radius: 10px; padding: 5px 10px; font-size: 13px; font-weight: 600; cursor: grab; user-select: none; transition: border-color .1s, background .1s; }
   .cb-item:hover { border-color: var(--blue); background: var(--blue-tint); }
   .cb-item small { font-size: 11px; color: var(--label3); font-weight: 500; }
@@ -2344,7 +2347,7 @@ const NaesinParser = (() => {
     const q = nameKey(curQ);
     const hit = (x) => !q || nameKey(x.name).includes(q);
     const sections = cats.filter((s) => curCat === '전체' || curCat === s).map((s) => ({ s, list: (s === CUSTOM_CAT ? custom : catalog.filter((c) => c.subject === s)).filter(hit) })).filter((x) => x.list.length);
-    box.innerHTML = sections.map(({ s, list }) => `<div class="cb-sec"><span class="cb-sec-h">${s === CUSTOM_CAT ? '✏️' : curDot(s)}${esc(s)}</span>${list.map((x) => `<span class="cb-item" draggable="true" data-dn="${esc(x.name)}" title="${esc(`${x.subject} · ${x.type || ''} · ${x.credit || '?'}학점`)} — 끌어다 놓거나 눌러서 담기">${s === CUSTOM_CAT ? curDot(x.subject) : ''}${esc(x.name)}<small>${esc(x.credit || '')}${x.credit ? '학점' : ''}</small>${x.removable ? `<button class="cb-x" data-act="delCustom" data-dn="${esc(x.name)}" title="서랍에서 빼기">✕</button>` : ''}</span>`).join('')}</div>`).join('')
+    box.innerHTML = sections.map(({ s, list }) => `<div class="cb-sec"><span class="cb-sec-h">${s === CUSTOM_CAT ? '✏️' : curDot(s)}<span>${esc(s)}</span></span><div class="cb-sec-items">${list.map((x) => `<span class="cb-item" draggable="true" data-dn="${esc(x.name)}" title="${esc(`${x.subject} · ${x.type || ''} · ${x.credit || '?'}학점`)} — 끌어다 놓거나 눌러서 담기">${s === CUSTOM_CAT ? curDot(x.subject) : ''}${esc(x.name)}<small>${esc(x.credit || '')}${x.credit ? '학점' : ''}</small>${x.removable ? `<button class="cb-x" data-act="delCustom" data-dn="${esc(x.name)}" title="서랍에서 빼기">✕</button>` : ''}</span>`).join('')}</div></div>`).join('')
       || `<p class="muted cb-none">"${esc(curQ)}" 과목이 목록에 없어요. <button class="btn small" data-act="customOpen">+ 목록에 없는 과목으로 추가</button></p>`;
     box.scrollTop = keep;
   }
